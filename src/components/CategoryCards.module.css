@@ -1,0 +1,120 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: clamp(0.9rem, 0.5rem + 1.4vw, 1.5rem);
+}
+
+.item {
+  display: flex;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: 100%;
+  padding: 1.1rem;
+  text-align: left;
+  border-radius: var(--radius-lg);
+  background: var(--paper-warm);
+  box-shadow: inset 0 0 0 1px var(--line);
+  overflow: hidden;
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    background-color var(--dur) var(--ease);
+}
+
+.card::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--green-500), var(--lime-400), var(--orange-500));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur) var(--ease);
+}
+
+.card:hover,
+.card:focus-visible {
+  transform: translateY(-6px);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow-md);
+}
+
+.card:hover::after,
+.card:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.art {
+  display: block;
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.art svg {
+  width: 100%;
+  height: auto;
+  transition: transform var(--dur-slow) var(--ease);
+}
+
+.card:hover .art svg {
+  transform: scale(1.05);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.title {
+  font-family: var(--font-head);
+  font-size: 1.18rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--ink-900);
+}
+
+.arrow {
+  flex: none;
+  color: var(--ink-400);
+  transition:
+    transform var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.card:hover .arrow,
+.card:focus-visible .arrow {
+  color: var(--green-600);
+  transform: translate(3px, -3px);
+}
+
+.blurb {
+  font-size: var(--fs-sm);
+  color: var(--ink-500);
+  line-height: 1.55;
+}
+
+.count {
+  margin-top: auto;
+  padding-top: 0.65rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--green-600);
+}
