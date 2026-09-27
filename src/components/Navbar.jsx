@@ -8,6 +8,8 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState("#home");
 
+  const closeMenu = () => setOpen(false);
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     onScroll();
@@ -41,11 +43,20 @@ export default function Navbar() {
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (event) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") closeMenu();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 900) closeMenu();
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   return (
     <header className={`${styles.header} ${scrolled ? styles.isScrolled : ""}`}>
@@ -118,7 +129,7 @@ export default function Navbar() {
           <ul className={styles.mobileList}>
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
-                <a className={styles.mobileLink} href={link.href} onClick={() => setOpen(false)}>
+                <a className={styles.mobileLink} href={link.href} onClick={closeMenu}>
                   {link.label}
                 </a>
               </li>
@@ -131,7 +142,7 @@ export default function Navbar() {
             href={WHATSAPP_URL}
             target="_blank"
             rel="noreferrer"
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
           >
             <MessageCircle size={18} aria-hidden="true" />
             Enquire on WhatsApp
@@ -139,7 +150,7 @@ export default function Navbar() {
           <a
             className="btn btn--ghost btn--block"
             href="#location"
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
           >
             <MapPin size={18} aria-hidden="true" />
             Find Us
@@ -150,7 +161,7 @@ export default function Navbar() {
       <button
         type="button"
         className={styles.scrim}
-        onClick={() => setOpen(false)}
+        onClick={closeMenu}
         aria-label="Close menu"
         tabIndex={-1}
         hidden={!open}

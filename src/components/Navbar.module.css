@@ -153,7 +153,7 @@
 .scrim {
   position: fixed;
   inset: var(--nav-h) 0 0;
-  z-index: -1;
+  z-index: 70;
   width: 100%;
   background: rgba(15, 26, 18, 0.34);
   animation: fade var(--dur) var(--ease);
@@ -169,8 +169,11 @@
 /* --------------------------- Mobile panel -------------------------- */
 
 .mobilePanel {
-  position: absolute;
-  inset: var(--nav-h) 0 auto;
+  position: fixed;
+  top: var(--nav-h);
+  left: 0;
+  right: 0;
+  z-index: 80;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -183,6 +186,10 @@
   animation: drop var(--dur) var(--ease-out);
   max-height: calc(100dvh - var(--nav-h));
   overflow-y: auto;
+}
+
+.mobilePanel[hidden] {
+  display: none;
 }
 
 @keyframes drop {
