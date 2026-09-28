@@ -1,0 +1,201 @@
+import { useState } from "react";
+import { Check, Copy, Loader2, QrCode, Smartphone } from "lucide-react";
+import { formatPrice } from "../../data/menu";
+import { UTR_MESSAGES, isAwaitingUtr } from "../../../shared/ordering.js";
+import { submitUtr } from "../../lib/api";
+import styles from "./UpiPaymentPanel.module.css";
+
+/**
+ * The manual UPI payment step.
+ *
+ * The customer pays JOC's UPI ID themselves and then tells us the UTR. Two rules
+ * shape this component:
+ *
+ *   1. every value shown here — the UPI ID, the amount, the QR, the intent link —
+ *      comes from the server's `payment` view, built from the order total the
+ *      server priced. Nothing is composed here, so a tampered or stale client
+ *      cannot redirect the payment or change the amount.
+ *   2. submitting a UTR can only ever move the order to
+ *      PAYMENT_VERIFICATION_REQUIRED. The screen says so plainly instead of
+ *      implying the order is paid, because it is not — an admin confirms it.
+ */
+export default function UpiPaymentPanel({ order, payment, onSubmitted }) {
+  /**
+   * Seeded from the server, not written by an effect. A customer who reloads the
+   * confirmation page after submitting a UTR must still see what they sent,
+   * rather than an empty form that looks like they forgot to press submit.
+   *
+   * A lazy initializer is the right tool: the panel only renders once the order
+   * and its payment view have both loaded, and once a UTR is accepted the form is
+   * replaced by the confirmation, so there is no later-arriving reference to
+   * catch up with.
+   */
+  const [reference, setReference] = useState(() => order?.paymentReference ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(null);
+
+  const awaiting = isAwaitingUtr(order?.paymentStatus);
+
+  if (!payment) {
+    return (
+      <div className={styles.panel} role="status">
+        <p className={styles.warning}>
+          Online payment is not available right now. Please call JOC to confirm this order, or
+          place a new order with Cash on Delivery.
+        </p>
+      </div>
+    );
+  }
+
+  const copy = async (text, what) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(what);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      setError("Could not copy automatically. Please select the text and copy it manually.");
+    }
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await submitUtr({ orderId: order.orderId, paymentReference: reference });
+      onSubmitted?.(result.order);
+    } catch (caught) {
+      setError(caught.message ?? UTR_MESSAGES.invalid);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={styles.panel}>
+      <h2 className={styles.heading}>
+        <Smartphone size={18} aria-hidden="true" />
+        Pay {formatPrice(order.total)} by UPI
+      </h2>
+
+      {awaiting ? (
+        <>
+          <p className={styles.verified} role="status">
+            <Check size={18} aria-hidden="true" />
+            <span>
+              UTR <strong>{reference}</strong> received. JOC will check it against our records and
+              confirm your payment shortly. You do not need to do anything else.
+            </span>
+          </p>
+          <p className={styles.note}>
+            Your order is already placed and is not affected by the time this takes.
+          </p>
+        </>
+      ) : (
+        <ol className={styles.steps}>
+          <li>
+            <span className={styles.stepNumber}>1</span>
+            <div>
+              <p className={styles.stepTitle}>Pay {formatPrice(order.total)} to our UPI ID</p>
+              <div className={styles.upiRow}>
+                <code className={styles.upiId}>{payment.vpa}</code>
+                <button
+                  type="button"
+                  className={styles.copyButton}
+                  onClick={() => copy(payment.vpa, "upi")}
+                >
+                  {copied === "upi" ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+                  {copied === "upi" ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <p className={styles.payeeName}>
+                {payment.payeeName} · amount {formatPrice(payment.amount)}
+                {payment.reference ? ` · ref ${payment.reference}` : ""}
+              </p>
+            </div>
+          </li>
+
+          <li>
+            <span className={styles.stepNumber}>2</span>
+            <div>
+              <p className={styles.stepTitle}>
+                Pay using your UPI app, then enter the UTR / transaction ID
+              </p>
+              <div className={styles.qrRow}>
+                {payment.qrSvg ? (
+                  <div
+                    className={styles.qr}
+                    /* The QR is generated by the server from the server-priced
+                       amount, as inline SVG. It is data, not markup from a user. */
+                    dangerouslySetInnerHTML={{ __html: payment.qrSvg }}
+                  />
+                ) : null}
+                <a
+                  className="btn btn--primary btn--lg"
+                  href={payment.uri}
+                  /* Opening a UPI intent must be a deliberate tap, and the URL is
+                     server-generated from the stored order. */
+                  rel="noreferrer"
+                >
+                  <QrCode size={18} aria-hidden="true" />
+                  Open UPI app
+                </a>
+              </div>
+              <p className={styles.note}>
+                Scan the QR with any UPI app, or tap above if your phone offers it.
+              </p>
+            </div>
+          </li>
+
+          <li>
+            <span className={styles.stepNumber}>3</span>
+            <div>
+              <p className={styles.stepTitle}>Enter the UTR so we can confirm your payment</p>
+              <form onSubmit={submit} className={styles.form}>
+                <label className="visually-hidden" htmlFor="utr-input">
+                  UTR / transaction reference
+                </label>
+                <input
+                  id="utr-input"
+                  className={styles.input}
+                  type="text"
+                  /* No inputMode="numeric": most UTRs are 12 digits, but the
+                     server accepts alphanumeric references, and a numeric keypad
+                     would stop the customer from typing one of those at all. */
+                  autoComplete="off"
+                  spellCheck="false"
+                  maxLength={64}
+                  value={reference}
+                  onChange={(event) => {
+                    setReference(event.target.value);
+                    if (error) setError(null);
+                  }}
+                  placeholder="e.g. 421234567890"
+                  aria-describedby={error ? "utr-error" : "utr-hint"}
+                  aria-invalid={error ? "true" : undefined}
+                />
+                <button type="submit" className="btn btn--primary" disabled={busy || !reference.trim()}>
+                  {busy ? (
+                    <Loader2 className={styles.spin} size={16} aria-hidden="true" />
+                  ) : null}
+                  Submit UTR
+                </button>
+              </form>
+              <p id="utr-hint" className={styles.note}>
+                Your UPI app shows this after a successful payment. Submitting it does not mark the
+                order paid — we verify it first.
+              </p>
+              {error ? (
+                <p id="utr-error" className={styles.error} role="alert">
+                  {error}
+                </p>
+              ) : null}
+            </div>
+          </li>
+        </ol>
+      )}
+    </div>
+  );
+}

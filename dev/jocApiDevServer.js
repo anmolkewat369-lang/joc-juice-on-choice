@@ -24,26 +24,43 @@ const API_PREFIX = "/api/";
  */
 const ROUTES = [
   { match: /^\/orders$/, file: "orders/index.js" },
+  { match: /^\/orders\/utr$/, file: "orders/utr.js" },
   { match: /^\/orders\/[^/]+$/, file: "orders/[orderId].js" },
+  { match: /^\/payments\/methods$/, file: "payments/methods.js" },
   { match: /^\/payments\/create$/, file: "payments/create.js" },
   { match: /^\/payments\/verify$/, file: "payments/verify.js" },
   { match: /^\/payments\/cancel$/, file: "payments/cancel.js" },
+  { match: /^\/admin\/login$/, file: "admin/login.js" },
+  { match: /^\/admin\/session$/, file: "admin/session.js" },
+  { match: /^\/admin\/orders$/, file: "admin/orders/index.js" },
+  { match: /^\/admin\/orders\/[^/]+$/, file: "admin/orders/[orderId].js" },
 ];
 
 function routeFor(url) {
   const pathname = url.split("?")[0].replace(/^\/api/, "") || "/";
   const found = ROUTES.find((route) => route.match.test(pathname));
   if (!found) throw new Error(`No API handler for ${pathname}`);
-  return found.file;
+  return found;
 }
 
-/** Vercel gives handlers `req.query`; connect's raw request does not have it. */
-function decorate(req) {
+/**
+ * Vercel gives handlers `req.query`; connect's raw request does not have it.
+ *
+ * For a dynamic route the last path segment is the `[param]` value, which is how
+ * Vercel surfaces it. Deriving it from the handler's own filename rather than
+ * from a hardcoded depth means a new dynamic route is picked up automatically
+ * instead of silently receiving `undefined`.
+ */
+function decorate(req, route) {
   const [pathname, search = ""] = req.url.split("?");
   const query = Object.fromEntries(new URLSearchParams(search));
-  // Dynamic route segments arrive as a single `orderId` param on Vercel.
-  const segments = pathname.replace(/^\/api\//, "").split("/").filter(Boolean);
-  if (segments.length === 2 && !query.orderId) query.orderId = segments[1];
+
+  const dynamic = /\[(\w+)\]\.js$/.exec(route.file);
+  if (dynamic) {
+    const [, param] = dynamic;
+    const segments = pathname.replace(/^\/api\//, "").split("/").filter(Boolean);
+    if (segments.length > 0 && query[param] === undefined) query[param] = segments.at(-1);
+  }
   return Object.assign(req, { query });
 }
 
@@ -72,16 +89,16 @@ export function jocApiDevServer() {
         if (!req.url?.startsWith(API_PREFIX)) return next();
 
         try {
-          const file = routeFor(req.url);
+          const route = routeFor(req.url);
           // Resolve from the project root, not from this file: Vite bundles
           // vite.config.js into node_modules/.vite-temp, so a relative import
           // here would resolve against the wrong directory.
-          const base = pathToFileURL(path.join(server.config.root, "api", file)).href;
+          const base = pathToFileURL(path.join(server.config.root, "api", route.file)).href;
           // Dev convenience: re-import on every request so handler edits apply
           // without bouncing the server. Node treats each query as a new module.
           const specifier = `${base}?v=${Date.now()}`;
           const { default: handler } = await import(/* @vite-ignore */ specifier);
-          await handler(decorate(req), decorateRes(res));
+          await handler(decorate(req, route), decorateRes(res));
         } catch (error) {
           server.config.logger.error(`[joc-api] ${error?.stack ?? error}`);
           res.statusCode = 500;

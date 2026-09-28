@@ -8,14 +8,18 @@
  * Plain ES module, no framework imports — safe in the browser and in Node.
  *
  * ----------------------------------------------------------------------------
- * DELIVERY PRICING IS A PLACEHOLDER
- * JOC has not supplied a final delivery policy. Everything below is a single
- * editable value; nothing on the site claims "free delivery".
+ * DELIVERY PRICING IS NOT SET
+ * JOC has not supplied a delivery policy, so the site does not invent one. The
+ * server-authoritative total is `subtotal + DELIVERY_CHARGE`, and DELIVERY_CHARGE
+ * is 0. Customers are told the charge is "To be confirmed" rather than being
+ * shown a made-up fee. When JOC confirms a real policy, change
+ * DELIVERY_CHARGE (and optionally FREE_DELIVERY_ABOVE) here — the cart, the
+ * checkout, the confirmation screen and the server all pick it up at once.
  * ----------------------------------------------------------------------------
  */
 
-/** Flat rupee amount added to every order. Set to 0 to disable. */
-export const DELIVERY_CHARGE = 20;
+/** Flat rupee amount added to every order. 0 = no charge is applied. */
+export const DELIVERY_CHARGE = 0;
 
 /** Optional free-delivery threshold in rupees. 0 disables the rule. */
 export const FREE_DELIVERY_ABOVE = 0;
@@ -24,11 +28,13 @@ export const FREE_DELIVERY_ABOVE = 0;
 export const DELIVERY_LABEL = "Delivery charge";
 
 /**
- * Placeholder wording. Replace with JOC's real policy before launch.
- * Kept short and honest — it does not promise anything the client has not said.
+ * What the customer actually sees in place of an amount, because no amount has
+ * been confirmed. Never render "Free" for a charge that has not been decided —
+ * that would be a claim JOC has not made.
  */
-export const DELIVERY_NOTE =
-  "Flat delivery charge. Final delivery pricing to be confirmed by JOC.";
+export const DELIVERY_PENDING_LABEL = "To be confirmed";
+
+export const DELIVERY_NOTE = "Delivery charge will be confirmed separately by JOC.";
 
 export const CURRENCY = "INR";
 
@@ -57,7 +63,7 @@ export const ORDER_STATUS = {
   CANCELLED: "CANCELLED",
 };
 
-/** Forward-only lifecycle. A future admin panel walks an order along this list. */
+/** Forward-only lifecycle. The admin dashboard walks an order along this list. */
 export const ORDER_STATUS_FLOW = [
   ORDER_STATUS.RECEIVED,
   ORDER_STATUS.CONFIRMED,
@@ -67,32 +73,135 @@ export const ORDER_STATUS_FLOW = [
   ORDER_STATUS.DELIVERED,
 ];
 
+/**
+ * Which order statuses may follow which.
+ *
+ * CANCELLED is reachable from any state that has not been handed to the
+ * customer yet, and nothing is reachable *from* CANCELLED or DELIVERED — a
+ * finished order is finished. Keeping the map here (rather than in the admin
+ * handler) means the same rule is testable without a database and identical
+ * everywhere it is enforced.
+ */
+export const ORDER_STATUS_TRANSITIONS = {
+  [ORDER_STATUS.RECEIVED]: [
+    ORDER_STATUS.CONFIRMED,
+    ORDER_STATUS.PREPARING,
+    ORDER_STATUS.CANCELLED,
+  ],
+  [ORDER_STATUS.CONFIRMED]: [
+    ORDER_STATUS.PREPARING,
+    ORDER_STATUS.CANCELLED,
+  ],
+  [ORDER_STATUS.PREPARING]: [
+    ORDER_STATUS.READY,
+    ORDER_STATUS.CONFIRMED,
+    ORDER_STATUS.CANCELLED,
+  ],
+  [ORDER_STATUS.READY]: [
+    ORDER_STATUS.OUT_FOR_DELIVERY,
+    ORDER_STATUS.PREPARING,
+    ORDER_STATUS.CANCELLED,
+  ],
+  [ORDER_STATUS.OUT_FOR_DELIVERY]: [
+    ORDER_STATUS.DELIVERED,
+    ORDER_STATUS.CANCELLED,
+  ],
+  [ORDER_STATUS.DELIVERED]: [],
+  [ORDER_STATUS.CANCELLED]: [],
+};
+
+export const isOrderStatus = (value) =>
+  typeof value === "string" && value in ORDER_STATUS_TRANSITIONS;
+
+/** Can an order legally move from `from` to `to`? Terminal states never move. */
+export function canTransitionOrderStatus(from, to) {
+  if (!isOrderStatus(from) || !isOrderStatus(to)) return false;
+  return ORDER_STATUS_TRANSITIONS[from].includes(to);
+}
+
+/** Plain-English status names, shared by the customer screens and the admin UI. */
+export const ORDER_STATUS_LABELS = {
+  [ORDER_STATUS.RECEIVED]: "Received",
+  [ORDER_STATUS.CONFIRMED]: "Confirmed",
+  [ORDER_STATUS.PREPARING]: "Preparing",
+  [ORDER_STATUS.READY]: "Ready",
+  [ORDER_STATUS.OUT_FOR_DELIVERY]: "Out for delivery",
+  [ORDER_STATUS.DELIVERED]: "Delivered",
+  [ORDER_STATUS.CANCELLED]: "Cancelled",
+};
+
+/**
+ * Payment states.
+ *
+ * PAYMENT_VERIFICATION_REQUIRED exists because a customer telling us they paid
+ * is a *claim*, not proof. A manual UPI payment sits in that state until an
+ * authenticated admin confirms the money actually arrived. Nothing in the
+ * customer-facing code path may move an order to PAID.
+ */
 export const PAYMENT_STATUS = {
   PENDING: "PENDING",
+  PAYMENT_VERIFICATION_REQUIRED: "PAYMENT_VERIFICATION_REQUIRED",
   PAID: "PAID",
   FAILED: "FAILED",
   REFUNDED: "REFUNDED",
 };
 
+export const PAYMENT_STATUS_LABELS = {
+  [PAYMENT_STATUS.PENDING]: "Pending",
+  [PAYMENT_STATUS.PAYMENT_VERIFICATION_REQUIRED]: "Verification required",
+  [PAYMENT_STATUS.PAID]: "Paid",
+  [PAYMENT_STATUS.FAILED]: "Not completed",
+  [PAYMENT_STATUS.REFUNDED]: "Refunded",
+};
+
+/** States an admin should look at first, rendered with a visual warning. */
+export const ATTENTION_PAYMENT_STATUSES = new Set([
+  PAYMENT_STATUS.PAYMENT_VERIFICATION_REQUIRED,
+]);
+
 export const PAYMENT_METHOD = {
   COD: "COD",
-  ONLINE: "ONLINE",
+  UPI: "UPI",
 };
+
+export const PAYMENT_METHOD_VALUES = Object.values(PAYMENT_METHOD);
+
+export const isPaymentMethod = (value) => PAYMENT_METHOD_VALUES.includes(value);
 
 export const PAYMENT_METHOD_LABELS = {
   [PAYMENT_METHOD.COD]: "Cash on Delivery",
-  [PAYMENT_METHOD.ONLINE]: "Paid Online",
+  [PAYMENT_METHOD.UPI]: "UPI",
 };
 
 /**
- * How an online order was actually settled. `razorpay_test` means a test
- * gateway key was used and no real money moved — the confirmation screen must
- * say so plainly, because the customer chose a payment method, not a sandbox.
+ * How a digital payment actually settled. `payment_provider` is stored
+ * separately from `payment_method` so switching settlement rails later does not
+ * require touching what the customer chose.
+ *
+ *   manual_upi  — customer paid to a UPI ID on their own; verified by an admin.
+ *   razorpay    — customer paid through Razorpay Checkout; verified by signature.
+ */
+export const PAYMENT_PROVIDER = {
+  MANUAL_UPI: "manual_upi",
+  RAZORPAY: "razorpay",
+};
+
+export const PAYMENT_PROVIDER_LABELS = {
+  [PAYMENT_PROVIDER.MANUAL_UPI]: "Manual UPI (verified by JOC)",
+  [PAYMENT_PROVIDER.RAZORPAY]: "Razorpay",
+  razorpay_test: "Razorpay (TEST — no real money was charged)",
+};
+
+/**
+ * How a settled order was paid, as shown to the customer. A test-mode gateway
+ * payment says so plainly, because the customer picked a payment method, not a
+ * sandbox.
  */
 export const PAYMENT_METHOD_USED_LABELS = {
   razorpay: "Paid Online",
   razorpay_test: "Paid Online (TEST — no real money was charged)",
 };
+
 
 /* -------------------------------- Pricing -------------------------------- */
 
@@ -106,6 +215,15 @@ export function totalsFor(subtotal) {
   const deliveryCharge = deliveryChargeFor(subtotal);
   return { subtotal, deliveryCharge, total: subtotal + deliveryCharge };
 }
+
+/**
+ * The delivery line as the customer sees it. A zero charge means "not decided
+ * yet", not "free", so it is never rendered as ₹0 or "Free".
+ */
+export function deliveryAmountLabel(deliveryCharge, formatAmount) {
+  return deliveryCharge > 0 ? formatAmount(deliveryCharge) : DELIVERY_PENDING_LABEL;
+}
+
 
 /* ------------------------------ Order identity ---------------------------- */
 
@@ -165,7 +283,7 @@ export function validateCheckout(input, { requireItems = true } = {}) {
   if (name.length < 2 || !NAME_RE.test(name)) errors.name = VALIDATION_MESSAGES.name;
   if (!phone) errors.phone = VALIDATION_MESSAGES.phone;
   if (address.length < 8) errors.address = VALIDATION_MESSAGES.address;
-  if (method !== PAYMENT_METHOD.COD && method !== PAYMENT_METHOD.ONLINE) {
+  if (!isPaymentMethod(method)) {
     errors.paymentMethod = VALIDATION_MESSAGES.paymentMethod;
   }
   if (requireItems && (!Array.isArray(input?.items) || input.items.length === 0)) {
@@ -205,3 +323,111 @@ export function normaliseItems(rawItems) {
   if (merged.size === 0) return { items: [], error: VALIDATION_MESSAGES.cart };
   return { items: [...merged].map(([id, qty]) => ({ id, qty })), error: null };
 }
+
+/* ---------------------- Customer-facing payment states -------------------- */
+
+/**
+ * What the customer is told, and whether they still owe us an action.
+ *
+ * This is the single source of truth for the confirmation screen, so "paid" can
+ * never be displayed before `payment_status` is actually PAID. Note there is
+ * deliberately no "Payment successful" state reachable from a customer action:
+ * PAID is only ever set by an authenticated admin (manual UPI) or by verified
+ * gateway signature (Razorpay).
+ */
+export const CUSTOMER_PAYMENT_STATE = {
+  ORDER_RECEIVED: "ORDER_RECEIVED",
+  AWAITING_PAYMENT: "AWAITING_PAYMENT",
+  VERIFICATION_REQUIRED: "VERIFICATION_REQUIRED",
+  VERIFIED: "VERIFIED",
+  FAILED: "FAILED",
+  CANCELLED: "CANCELLED",
+};
+
+const CUSTOMER_PAYMENT_COPY = {
+  [CUSTOMER_PAYMENT_STATE.ORDER_RECEIVED]: {
+    title: "Order received",
+    lead: "Thank you for ordering from JOC. We will prepare your order shortly.",
+  },
+  [CUSTOMER_PAYMENT_STATE.AWAITING_PAYMENT]: {
+    title: "Payment pending",
+    lead: "Pay using UPI, then enter your UTR / transaction ID so we can match the payment.",
+  },
+  [CUSTOMER_PAYMENT_STATE.VERIFICATION_REQUIRED]: {
+    title: "Payment verification required",
+    lead:
+      "We have your UTR. JOC will check it against our bank/UPI records and confirm your payment.",
+  },
+  [CUSTOMER_PAYMENT_STATE.VERIFIED]: {
+    title: "Payment verified",
+    lead: "JOC has confirmed your payment. We are preparing your order now.",
+  },
+  [CUSTOMER_PAYMENT_STATE.FAILED]: {
+    title: "Payment could not be completed",
+    lead:
+      "Your payment was not confirmed, so nothing has been recorded as paid. Your order is saved.",
+  },
+  [CUSTOMER_PAYMENT_STATE.CANCELLED]: {
+    title: "Order cancelled",
+    lead: "This order was cancelled. Please place a new order if you still would like to order.",
+  },
+};
+
+/** Pure function of the server's own order row — no browser state involved. */
+export function customerPaymentState(order) {
+  if (!order) return CUSTOMER_PAYMENT_STATE.FAILED;
+  if (order.orderStatus === ORDER_STATUS.CANCELLED) {
+    return CUSTOMER_PAYMENT_STATE.CANCELLED;
+  }
+  if (order.paymentStatus === PAYMENT_STATUS.PAID) {
+    return CUSTOMER_PAYMENT_STATE.VERIFIED;
+  }
+  if (order.paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_REQUIRED) {
+    return CUSTOMER_PAYMENT_STATE.VERIFICATION_REQUIRED;
+  }
+  if (order.paymentStatus === PAYMENT_STATUS.FAILED) {
+    return CUSTOMER_PAYMENT_STATE.FAILED;
+  }
+  // PENDING: cash on delivery is complete as far as ordering goes; a digital
+  // payment still needs the customer to act.
+  if (order.paymentMethod === PAYMENT_METHOD.COD) {
+    return CUSTOMER_PAYMENT_STATE.ORDER_RECEIVED;
+  }
+  return CUSTOMER_PAYMENT_STATE.AWAITING_PAYMENT;
+}
+
+export function customerPaymentCopy(order) {
+  const state = customerPaymentState(order);
+  return { state, ...CUSTOMER_PAYMENT_COPY[state] };
+}
+
+/** True while the customer still has to pay and enter a UTR. */
+export const isAwaitingUtr = (order) =>
+  customerPaymentState(order) === CUSTOMER_PAYMENT_STATE.AWAITING_PAYMENT;
+
+/* ------------------------- UPI reference validation ---------------------- */
+
+/**
+ * A UTR / transaction reference is whatever the customer's bank or UPI app
+ * showed them: 12-digit UTRs are most common, but UPI apps also display
+ * alphanumeric reference numbers. Accept both, reject everything else, and never
+ * store a string that could be interpreted as markup or SQL.
+ */
+export const UTR_MIN_LENGTH = 6;
+export const UTR_MAX_LENGTH = 64;
+const UTR_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{5,63}$/;
+
+export function normalisePaymentReference(raw) {
+  if (typeof raw !== "string") return { value: null, error: UTR_MESSAGES.invalid };
+  const value = raw.trim().replace(/\s+/g, "");
+  if (value.length < UTR_MIN_LENGTH) return { value: null, error: UTR_MESSAGES.invalid };
+  if (value.length > UTR_MAX_LENGTH) return { value: null, error: UTR_MESSAGES.tooLong };
+  if (!UTR_RE.test(value)) return { value: null, error: UTR_MESSAGES.invalid };
+  return { value, error: null };
+}
+
+export const UTR_MESSAGES = {
+  invalid: "Please enter the UTR / transaction reference exactly as your UPI app showed it.",
+  tooLong: "That reference is too long. Please check and re-enter it.",
+  missing: "Please enter your UTR / transaction reference.",
+};

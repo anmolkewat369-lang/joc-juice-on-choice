@@ -1,13 +1,16 @@
 /**
  * Runtime DDL, executed at most once per cold start.
  *
- * Mirrors `db/schema.sql` — that file stays the reference for running the
- * migration by hand in the Supabase SQL editor. This copy exists so the API can
- * self-provision the table on first request and the client does not have to
- * open a SQL editor to try ordering. Every statement is idempotent.
+ * Mirrors `db/schema.sql` plus `db/migrations/002_payment_provider_and_admin.sql`
+ * — those files stay the reference for running migrations by hand in the
+ * Supabase SQL editor. This copy exists so the API can self-provision on first
+ * request during local development and nobody has to open a SQL editor to try
+ * ordering. Every statement is idempotent.
  *
- * If you would rather provision explicitly, run db/schema.sql and set
- * JOC_AUTO_MIGRATE=false.
+ * PRODUCTION MUST SET JOC_AUTO_MIGRATE=false and apply
+ * db/migrations/002_payment_provider_and_admin.sql once through the Supabase
+ * SQL editor. The Supabase *transaction* pooler hands the session between
+ * backends, so a multi-statement DDL script must never be run through it.
  */
 
 export const ORDERS_TABLE = "joc_orders";
@@ -31,23 +34,146 @@ create table if not exists joc_orders (
   delivery_charge       integer not null,
   total                 integer not null,
   currency              text not null default 'INR',
-  payment_method        text not null check (payment_method in ('COD', 'ONLINE')),
-  payment_status        text not null check (payment_status in ('PENDING', 'PAID', 'FAILED', 'REFUNDED')),
+  payment_method        text not null check (payment_method in ('COD', 'UPI')),
+  payment_status        text not null check (payment_status in ('PENDING', 'PAYMENT_VERIFICATION_REQUIRED', 'PAID', 'FAILED', 'REFUNDED')),
   order_status          text not null check (order_status in ('RECEIVED', 'CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED')),
   razorpay_order_id     text unique,
   razorpay_payment_id   text,
   razorpay_signature    text,
   payment_method_used   text,
+  payment_reference     text,
+  payment_provider      text check (payment_provider is null or payment_provider in ('manual_upi', 'razorpay')),
+  payment_verified_at   timestamptz,
+  payment_verified_by   text,
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- Upgrade path for a pre-002 database.
+--
+-- 'create table if not exists' is a no-op when the table already exists, so
+-- without this block a database created before migration 002 would silently keep
+-- the old columns and the old 'ONLINE' payment_method — the API would then
+-- write UPI rows into a table whose CHECK rejects them. These statements mirror
+-- the migration, in the same deliberate order: add columns, backfill legacy
+-- rows, and only then narrow the CHECKs.
+-- ---------------------------------------------------------------------------
+alter table joc_orders add column if not exists payment_reference text;
+alter table joc_orders add column if not exists payment_provider text;
+alter table joc_orders add column if not exists payment_verified_at timestamptz;
+alter table joc_orders add column if not exists payment_verified_by text;
+
+update joc_orders
+   set payment_method   = 'UPI',
+       payment_provider = case
+                           when razorpay_order_id is not null then 'razorpay'
+                           else 'manual_upi'
+                         end
+ where payment_method = 'ONLINE';
+
+update joc_orders
+   set payment_provider = 'manual_upi'
+ where payment_method = 'UPI' and payment_provider is null;
+
+update joc_orders
+   set payment_provider = null
+ where payment_method = 'COD' and payment_provider is not null;
+
+update joc_orders
+   set payment_verified_at = coalesce(payment_verified_at, updated_at)
+ where payment_status = 'PAID' and payment_verified_at is null;
+
+-- Narrow each CHECK exactly once.
+--
+-- The guard on each block is "is the constraint already defined with the new
+-- values?", read from the catalog. That keeps every cold start after the first
+-- to a cheap catalog read instead of a full table scan under an ACCESS EXCLUSIVE
+-- lock, and it skips rather than aborts if legacy data would not satisfy the new
+-- CHECK — the manual migration raises a specific error in that case.
+do $$
+declare
+  current_clause text;
+begin
+  select c.check_clause into current_clause
+    from information_schema.check_constraints c
+    join information_schema.table_constraints t
+      on t.constraint_name = c.constraint_name
+     and t.constraint_schema = c.constraint_schema
+   where t.table_name = 'joc_orders'
+     and t.constraint_name = 'joc_orders_payment_method_check';
+
+  if current_clause is null or current_clause not like '%UPI%' then
+    if not exists (select 1 from joc_orders where payment_method not in ('COD', 'UPI')) then
+      alter table joc_orders drop constraint if exists joc_orders_payment_method_check;
+      alter table joc_orders add constraint joc_orders_payment_method_check
+        check (payment_method in ('COD', 'UPI'));
+    end if;
+  end if;
+
+  select c.check_clause into current_clause
+    from information_schema.check_constraints c
+    join information_schema.table_constraints t
+      on t.constraint_name = c.constraint_name
+     and t.constraint_schema = c.constraint_schema
+   where t.table_name = 'joc_orders'
+     and t.constraint_name = 'joc_orders_payment_status_check';
+
+  if current_clause is null or current_clause not like '%VERIFICATION%' then
+    if not exists (select 1 from joc_orders
+                    where payment_status not in
+                      ('PENDING', 'PAYMENT_VERIFICATION_REQUIRED', 'PAID', 'FAILED', 'REFUNDED')) then
+      alter table joc_orders drop constraint if exists joc_orders_payment_status_check;
+      alter table joc_orders add constraint joc_orders_payment_status_check
+        check (payment_status in (
+          'PENDING', 'PAYMENT_VERIFICATION_REQUIRED', 'PAID', 'FAILED', 'REFUNDED'));
+    end if;
+  end if;
+
+  select c.check_clause into current_clause
+    from information_schema.check_constraints c
+    join information_schema.table_constraints t
+      on t.constraint_name = c.constraint_name
+     and t.constraint_schema = c.constraint_schema
+   where t.table_name = 'joc_orders'
+     and t.constraint_name = 'joc_orders_payment_provider_check';
+
+  if current_clause is null or current_clause not like '%manual_upi%' then
+    alter table joc_orders drop constraint if exists joc_orders_payment_provider_check;
+    alter table joc_orders add constraint joc_orders_payment_provider_check
+      check (payment_provider is null or payment_provider in ('manual_upi', 'razorpay'));
+  end if;
+end $$;
+
+create table if not exists joc_order_events (  id           bigint generated always as identity primary key,
+  order_uuid   uuid not null references joc_orders (id) on delete cascade,
+  order_ref    text not null,
+  event_type   text not null
+                 check (event_type in (
+                   'ORDER_CREATED', 'STATUS_CHANGED', 'PAYMENT_REFERENCE_SUBMITTED',
+                   'PAYMENT_STATUS_CHANGED', 'PAYMENT_METHOD_CHANGED',
+                   'PAYMENT_VERIFIED', 'PAYMENT_FAILED', 'NOTE'
+                 )),
+  field        text,
+  old_value    text,
+  new_value    text,
+  actor        text not null default 'system',
+  note         text,
+  metadata     jsonb not null default '{}'::jsonb,
+  created_at   timestamptz not null default now()
 );
 
 create index if not exists joc_orders_created_at_idx on joc_orders (created_at desc);
 create index if not exists joc_orders_status_idx on joc_orders (order_status, created_at desc);
 create index if not exists joc_orders_payment_idx on joc_orders (payment_status, created_at desc);
+create index if not exists joc_orders_payment_provider_idx on joc_orders (payment_provider);
+create index if not exists joc_orders_payment_reference_idx on joc_orders (payment_reference) where payment_reference is not null;
+create index if not exists joc_orders_phone_idx on joc_orders (phone);
+create index if not exists joc_order_events_order_idx on joc_order_events (order_uuid, created_at desc);
+create index if not exists joc_order_events_created_at_idx on joc_order_events (created_at desc);
 
 create or replace function joc_touch_updated_at() returns trigger
-language plpgsql as $$
+  language plpgsql as $$
 begin
   new.updated_at = now();
   return new;
@@ -60,4 +186,13 @@ create trigger joc_orders_touch
   for each row execute function joc_touch_updated_at();
 
 alter table joc_orders enable row level security;
+alter table joc_order_events enable row level security;
+
+create table if not exists joc_schema_migrations (
+  version     text primary key,
+  applied_at  timestamptz not null default now()
+);
+insert into joc_schema_migrations (version) values ('002_payment_provider_and_admin')
+  on conflict (version) do nothing;
 `;
+

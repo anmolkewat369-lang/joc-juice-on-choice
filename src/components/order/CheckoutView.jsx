@@ -202,6 +202,7 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
                   }
                 }}
                 error={errors.paymentMethod}
+                digitalPayment={flow.digitalPayment}
               />
             </div>
 

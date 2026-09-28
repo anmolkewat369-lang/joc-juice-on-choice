@@ -13,21 +13,27 @@ import {
 import { useCart } from "../../cart/cartStore";
 import { formatPrice } from "../../data/menu";
 import {
+  CUSTOMER_PAYMENT_STATE,
   DELIVERY_LABEL,
+  DELIVERY_PENDING_LABEL,
   PAYMENT_METHOD,
   PAYMENT_METHOD_LABELS,
   PAYMENT_METHOD_USED_LABELS,
   PAYMENT_STATUS,
+  customerPaymentState,
 } from "../../../shared/ordering.js";
-import { getOrder } from "../../lib/api";
+import { getOrderDetail } from "../../lib/api";
 import { useOrderFlow, isBusy } from "../../lib/useOrderFlow";
+import UpiPaymentPanel from "./UpiPaymentPanel";
 import styles from "./OrderConfirmation.module.css";
 
 /**
  * One screen covers every terminal state of an order:
  *
- *   placed  — cash on delivery, or an online payment the server verified
- *   failed  — the payment did not complete, with retry and switch-to-COD
+ *   placed   — cash on delivery, or a UPI payment the admin has verified
+ *   awaiting — a UPI order whose payment has not been made yet
+ *   verifying— a UTR has been submitted and JOC is confirming it
+ *   failed   — the payment did not complete, with retry and switch-to-COD
  *   cancelled— the customer closed the payment window, same two options
  *
  * It reloads the order from the server on mount, so a refresh here is safe and
@@ -36,13 +42,15 @@ import styles from "./OrderConfirmation.module.css";
 export default function OrderConfirmation({ orderId, initialOutcome, storageNotice, onSettled }) {
   const { clearCart } = useCart();
   const [order, setOrder] = useState(null);
+  const [payment, setPayment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const headingRef = useRef(null);
 
   const flow = useOrderFlow({
-    onComplete: ({ order: next, outcome, switchedToCod }) => {
+    onComplete: ({ order: next, outcome, switchedToCod, payment: nextPayment }) => {
       setOrder(next);
+      if (nextPayment) setPayment(nextPayment);
       onSettled?.({ order: next, outcome, switchedToCod });
     },
   });
@@ -51,11 +59,12 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    getOrder(orderId, { signal: controller.signal })
-      .then((fresh) => {
-        setOrder(fresh);
+    getOrderDetail(orderId, { signal: controller.signal })
+      .then((data) => {
+        setOrder(data.order);
+        setPayment(data.payment ?? null);
         setLoadError(null);
-        if (fresh.paymentStatus === PAYMENT_STATUS.PAID || fresh.paymentMethod === PAYMENT_METHOD.COD) {
+        if (data.order.paymentStatus === PAYMENT_STATUS.PAID || data.order.paymentMethod === PAYMENT_METHOD.COD) {
           clearCart();
         }
       })
@@ -112,7 +121,11 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
   const paid = order.paymentStatus === PAYMENT_STATUS.PAID;
   const cod = order.paymentMethod === PAYMENT_METHOD.COD;
   const failed = order.paymentStatus === PAYMENT_STATUS.FAILED;
+  const awaitingPayment =
+    order.paymentMethod === PAYMENT_METHOD.UPI && order.paymentStatus === PAYMENT_STATUS.PENDING;
   const outcome = initialOutcome;
+  const state = customerPaymentState(order);
+  const copy = CUSTOMER_COPY[state] ?? CUSTOMER_COPY[CUSTOMER_PAYMENT_STATE.ORDER_RECEIVED];
 
   if (failed) {
     return (
@@ -181,14 +194,19 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
   return (
     <Shell>
       <div className={styles.panel}>
-        <span className={`${styles.mark} ${paid || cod ? styles.markGood : ""}`} aria-hidden="true">
-          <Check size={30} />
+        <span
+          className={`${styles.mark} ${
+            paid || cod || !awaitingPayment ? styles.markGood : styles.markWarn
+          }`}
+          aria-hidden="true"
+        >
+          {awaitingPayment ? <Wallet size={30} /> : <Check size={30} />}
         </span>
 
         <h1 className={styles.title} tabIndex={-1} ref={headingRef}>
-          Order Placed Successfully!
+          {awaitingPayment ? "Order Placed — Complete Your Payment" : copy.title}
         </h1>
-        <p className={styles.lead}>Thank you for ordering from JOC. We will prepare your order shortly.</p>
+        <p className={styles.lead}>{awaitingPayment ? copy.lead : copy.lead}</p>
 
         <dl className={styles.facts}>
           <div>
@@ -201,7 +219,7 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
               {cod
                 ? PAYMENT_METHOD_LABELS.COD
                 : PAYMENT_METHOD_USED_LABELS[order.paymentMethodUsed] ??
-                  PAYMENT_METHOD_LABELS.ONLINE}
+                  PAYMENT_METHOD_LABELS.UPI}
             </dd>
           </div>
           <div>
@@ -217,6 +235,14 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
             <dd>{formatPrice(order.total)}</dd>
           </div>
         </dl>
+
+        {awaitingPayment ? (
+          <UpiPaymentPanel
+            order={order}
+            payment={payment}
+            onSubmitted={(next) => setOrder(next)}
+          />
+        ) : null}
 
         <OrderLines order={order} />
 
@@ -297,7 +323,7 @@ function OrderLines({ order }) {
       </ul>
       <p className={styles.itemTotals}>
         Subtotal {formatPrice(order.subtotal)} · {DELIVERY_LABEL}{" "}
-        {order.deliveryCharge === 0 ? "Free" : formatPrice(order.deliveryCharge)}
+        {order.deliveryCharge === 0 ? DELIVERY_PENDING_LABEL : formatPrice(order.deliveryCharge)}
       </p>
     </div>
   );
@@ -305,6 +331,7 @@ function OrderLines({ order }) {
 
 const STATUS_LABELS = {
   PENDING: "Pending",
+  PAYMENT_VERIFICATION_REQUIRED: "Awaiting our confirmation",
   PAID: "Paid",
   FAILED: "Not completed",
   REFUNDED: "Refunded",
@@ -315,6 +342,40 @@ const STATUS_LABELS = {
   OUT_FOR_DELIVERY: "Out for delivery",
   DELIVERED: "Delivered",
   CANCELLED: "Cancelled",
+};
+
+/**
+ * Headline copy, keyed by the shared customer-facing state.
+ *
+ * The wording is deliberately careful about the one thing that must never be
+ * ambiguous: a submitted UTR is *not* a paid order. The customer is told it is
+ * being checked, and that they need do nothing further.
+ */
+const CUSTOMER_COPY = {
+  [CUSTOMER_PAYMENT_STATE.ORDER_RECEIVED]: {
+    title: "Order Placed Successfully!",
+    lead: "Thank you for ordering from JOC. We will prepare your order shortly.",
+  },
+  [CUSTOMER_PAYMENT_STATE.AWAITING_PAYMENT]: {
+    title: "Order Placed — Complete Your Payment",
+    lead: "Thank you for ordering from JOC. Your order is saved — please pay the exact amount by UPI below and submit your UTR so we can confirm it.",
+  },
+  [CUSTOMER_PAYMENT_STATE.VERIFICATION_REQUIRED]: {
+    title: "Order Placed — Verifying Your Payment",
+    lead: "Thank you for ordering from JOC. We have your UTR and are checking it against our records. You do not need to do anything else.",
+  },
+  [CUSTOMER_PAYMENT_STATE.VERIFIED]: {
+    title: "Order Placed Successfully!",
+    lead: "Thank you for ordering from JOC. Your payment is confirmed and we will prepare your order shortly.",
+  },
+  [CUSTOMER_PAYMENT_STATE.FAILED]: {
+    title: "Payment could not be completed",
+    lead: "Your payment was not confirmed, so nothing has been charged. Your order is saved — you can try again or pay cash on delivery.",
+  },
+  [CUSTOMER_PAYMENT_STATE.CANCELLED]: {
+    title: "Payment was cancelled",
+    lead: "You closed the payment window. Your order is saved — you can try again or pay cash on delivery.",
+  },
 };
 
 const statusLabel = (status) => STATUS_LABELS[status] ?? status;

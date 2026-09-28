@@ -92,7 +92,16 @@ export const createOrder = (payload, idempotencyKey) =>
     return data;
   });
 
-export const getOrder = (orderId, { signal } = {}) => {
+export const getOrder = (orderId, { signal } = {}) =>
+  getOrderDetail(orderId, { signal }).then((data) => data.order);
+
+/**
+ * The order plus its payment view — the UPI ID, intent URI and QR rebuilt from
+ * the total the *server* priced. Kept separate from getOrder because only the
+ * confirmation screen needs the payment half, and returning the whole payload
+ * everywhere would invite a caller to trust a client-side total.
+ */
+export const getOrderDetail = (orderId, { signal } = {}) => {
   const token = recallToken(orderId);
   if (!token) {
     return Promise.reject(
@@ -103,27 +112,80 @@ export const getOrder = (orderId, { signal } = {}) => {
     );
   }
   // The secret travels in a header, not the query string, so it never lands in
-  // server access logs. getAccessToken() on the server also accepts `?token=`
-  // for links that were intentionally shared.
+  // server access logs. The server also accepts `?token=` when
+  // JOC_ALLOW_TOKEN_QUERY=true, but only for links that were intentionally shared.
   return request(`/api/orders/${encodeURIComponent(orderId)}`, {
     signal,
     headers: { "X-Order-Token": token },
-  }).then((data) => data.order);
+  });
+};
+
+/**
+ * What the customer can pay with, per the server.
+ *
+ * The checkout renders its payment options from this rather than hard-coding
+ * them, so an option that cannot actually take a payment is never shown — and a
+ * newly configured rail appears without a frontend release.
+ */
+export const getPaymentMethods = ({ signal } = {}) =>
+  request("/api/payments/methods", { signal }).then((data) => ({
+    provider: data.provider,
+    digital: data.methods.find((entry) => entry.method !== "COD") ?? null,
+  }));
+
+/**
+ * Every payment call carries the order's own secret.
+ *
+ * Order ids are sequential, so the server treats a bare order id as belonging to
+ * anyone. Presenting the token is what proves this browser owns the order being
+ * paid for, converted or verified.
+ */
+const withOrderToken = (orderId, headers = {}) => {
+  const token = recallToken(orderId);
+  if (!token) {
+    throw new ApiRequestError("We could not find that order on this device.", {
+      code: "order_not_found",
+      status: 404,
+    });
+  }
+  return { "X-Order-Token": token, ...headers };
 };
 
 export const startPayment = (orderId) =>
-  request("/api/payments/create", { method: "POST", body: { orderId } });
+  request("/api/payments/create", {
+    method: "POST",
+    body: { orderId },
+    headers: withOrderToken(orderId),
+  });
 
 export const verifyPayment = ({ orderId, gatewayOrderId, paymentId, signature }) =>
   request("/api/payments/verify", {
     method: "POST",
     body: { orderId, gatewayOrderId, paymentId, signature },
+    headers: withOrderToken(orderId),
   }).then((data) => data.order);
 
 export const abandonPayment = ({ orderId, paymentMethod }) =>
-  request("/api/payments/cancel", { method: "POST", body: { orderId, paymentMethod } }).then(
-    (data) => data.order,
-  );
+  request("/api/payments/cancel", {
+    method: "POST",
+    body: { orderId, paymentMethod },
+    headers: withOrderToken(orderId),
+  }).then((data) => data.order);
+
+/**
+ * Submit a UPI transaction reference.
+ *
+ * This records a *claim* that the money was sent. It can only ever move the order
+ * to PAYMENT_VERIFICATION_REQUIRED — the server has no path here that produces
+ * PAID, and only an authenticated admin can do that. The response echoes back the
+ * exact text the customer should enter on the confirmation screen.
+ */
+export const submitUtr = ({ orderId, paymentReference }) =>
+  request("/api/orders/utr", {
+    method: "POST",
+    body: { orderId, paymentReference },
+    headers: withOrderToken(orderId),
+  });
 
 /** Stable per-attempt token so a repeat of the same submission is idempotent. */
 export const newIdempotencyKey = () =>

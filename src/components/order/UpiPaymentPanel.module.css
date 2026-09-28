@@ -1,0 +1,209 @@
+.panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: clamp(1.1rem, 0.9rem + 1vw, 1.6rem);
+  border-radius: var(--radius-lg);
+  background: var(--paper-tint);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.steps > li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.stepNumber {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-pill);
+  background: var(--green-900);
+  color: var(--lime-300);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.stepTitle {
+  font-weight: 600;
+  color: var(--ink-800);
+  margin-bottom: 0.5rem;
+}
+
+.upiRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.upiId {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--green-800);
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  /* A UPI ID is not a secret, but it should not be broken mid-word on wrap. */
+  word-break: break-all;
+}
+
+.copyButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.6rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--ink-800);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: box-shadow var(--dur-fast) var(--ease);
+}
+
+.copyButton:hover {
+  box-shadow: inset 0 0 0 1px var(--green-600);
+}
+
+.copyButton:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.payeeName {
+  margin-top: 0.4rem;
+  font-size: var(--fs-sm);
+  color: var(--ink-500);
+}
+
+.qrRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.qr {
+  width: 156px;
+  height: 156px;
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding: 0.7rem 0.85rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--ink-900);
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 1rem;
+  transition: box-shadow var(--dur-fast) var(--ease);
+}
+
+.input::placeholder {
+  color: var(--ink-400);
+  font-family: var(--font-body);
+}
+
+.input:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--green-500), var(--ring);
+}
+
+.input[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 2px var(--berry-500);
+}
+
+.note {
+  margin-top: 0.45rem;
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--ink-500);
+}
+
+.error {
+  margin-top: 0.45rem;
+  font-size: var(--fs-sm);
+  color: var(--berry-600);
+}
+
+.verified {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.55rem;
+  align-items: start;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--green-800);
+}
+
+.warning {
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: #9a4415;
+}
+
+.spin {
+  animation: joc-spin 900ms linear infinite;
+}
+
+@keyframes joc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

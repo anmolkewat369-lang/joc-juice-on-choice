@@ -6,26 +6,21 @@
  * the per-order secret issued at creation; the server compares it in constant
  * time against the stored hash. A wrong or missing secret returns 404, exactly
  * as an unknown order id does, so the endpoint cannot be used to probe.
+ *
+ * The token gate now lives in one place, _lib/orderToken.js, shared with the
+ * payment routes — a second copy of this comparison is a second chance to get
+ * it subtly wrong.
+ *
+ * Query-string tokens (`?token=`) are off by default. A URL ends up in browser
+ * history, in `Referer` headers and in proxy logs, and an order URL is often
+ * shared. Set JOC_ALLOW_TOKEN_QUERY=true only if a deep link genuinely needs it.
  */
 
-import {
-  ApiError,
-  methodGuard,
-  sendError,
-  sendJson,
-  clientKey,
-} from "../_lib/http.js";
-import { getStore, toPublicOrder, hashAccessToken } from "../_lib/store.js";
+import { ApiError, methodGuard, sendError, sendJson, clientKey } from "../_lib/http.js";
+import { getStore, toPublicOrder } from "../_lib/store.js";
 import { rateLimit, sweepRateLimits } from "../_lib/rateLimit.js";
-import { timingSafeEqual } from "node:crypto";
-
-const ORDER_ID_RE = /^JOC-\d{8}-\d{4,}$/i;
-
-function tokenMatches(storedHash, provided) {
-  const a = Buffer.from(String(storedHash ?? ""));
-  const b = Buffer.from(hashAccessToken(provided));
-  return a.length === b.length && timingSafeEqual(a, b);
-}
+import { requireOwnedOrder } from "../_lib/orderToken.js";
+import { paymentViewFor } from "../_lib/payments.js";
 
 export default async function handler(req, res) {
   if (!methodGuard(req, res, "GET")) return;
@@ -37,26 +32,17 @@ export default async function handler(req, res) {
       throw new ApiError(429, "Too many requests. Please try again shortly.", "rate_limited");
     }
 
-    const raw = req.query?.orderId ?? "";
-    const orderId = Array.isArray(raw) ? raw[0] : String(raw);
-    if (!ORDER_ID_RE.test(orderId)) throw notFound();
-
-    // Preferred: X-Order-Token header (keeps the secret out of access logs).
-    // Fallback: ?token= for deep links that were deliberately shared.
-    const token = req.headers?.["x-order-token"] || req.headers?.["X-Order-Token"];
-    const queryToken = req.query?.token;
-    const provided = typeof token === "string" && token.length > 0 ? token : queryToken;
-    if (typeof provided !== "string" || provided.length < 16) throw notFound();
-
     const store = await getStore();
-    const row = await store.getOrder(orderId.toUpperCase());
-    if (!row || !tokenMatches(row.access_hash, provided)) throw notFound();
+    const row = await requireOwnedOrder(req, store, { param: "orderId" });
 
-    return sendJson(res, 200, { order: toPublicOrder(row) });
+    // The payment view is rebuilt on every read from the server's stored total,
+    // so the confirmation screen always shows the amount the server priced —
+    // including after the order has been switched to Cash on Delivery.
+    return sendJson(res, 200, {
+      order: toPublicOrder(row),
+      payment: paymentViewFor(row),
+    });
   } catch (error) {
     return sendError(res, error);
   }
 }
-
-const notFound = () =>
-  new ApiError(404, "We could not find that order on this device.", "order_not_found");

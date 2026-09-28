@@ -465,3 +465,90 @@ button {
     transform: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Admin new-order toast.
+
+   Deliberately global rather than a CSS module: this is rendered through a
+   React portal-like fixed overlay and the names are namespaced with `joc-admin-`
+   so they cannot collide with anything in the storefront's modules.
+   --------------------------------------------------------------------------- */
+
+.joc-admin-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: min(22rem, calc(100vw - 2rem));
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-lg);
+  background: var(--green-900);
+  color: #fff;
+  font: 400 0.9rem/1.5 var(--font-body), system-ui, sans-serif;
+  box-shadow: var(--shadow-lg);
+  animation: joc-admin-toast-in 280ms var(--ease-out);
+}
+
+.joc-admin-toast strong {
+  font-weight: 700;
+}
+
+.joc-admin-toast-note {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.joc-admin-toast-close,
+.joc-admin-toast-action {
+  align-self: flex-start;
+  margin-top: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.joc-admin-toast-action {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 79;
+  background: var(--green-800);
+  color: #fff;
+}
+
+.joc-admin-toast-close:hover,
+.joc-admin-toast-action:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.joc-admin-toast-close:focus-visible,
+.joc-admin-toast-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(234, 249, 138, 0.5);
+}
+
+@keyframes joc-admin-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .joc-admin-toast {
+    animation: none;
+  }
+}
