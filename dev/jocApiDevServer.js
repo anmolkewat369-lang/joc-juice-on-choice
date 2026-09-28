@@ -10,7 +10,58 @@
  * It is a build-time no-op: `apply: "serve"` keeps it out of the bundle.
  */
 
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
 const API_PREFIX = "/api/";
+
+/**
+ * The real handler file for an incoming path.
+ *
+ * The map is explicit rather than derived from the URL so the dev bridge can
+ * only ever reach an endpoint that actually exists — a typo here fails loudly
+ * instead of silently 404ing in development while working in production.
+ */
+const ROUTES = [
+  { match: /^\/orders$/, file: "orders/index.js" },
+  { match: /^\/orders\/[^/]+$/, file: "orders/[orderId].js" },
+  { match: /^\/payments\/create$/, file: "payments/create.js" },
+  { match: /^\/payments\/verify$/, file: "payments/verify.js" },
+  { match: /^\/payments\/cancel$/, file: "payments/cancel.js" },
+];
+
+function routeFor(url) {
+  const pathname = url.split("?")[0].replace(/^\/api/, "") || "/";
+  const found = ROUTES.find((route) => route.match.test(pathname));
+  if (!found) throw new Error(`No API handler for ${pathname}`);
+  return found.file;
+}
+
+/** Vercel gives handlers `req.query`; connect's raw request does not have it. */
+function decorate(req) {
+  const [pathname, search = ""] = req.url.split("?");
+  const query = Object.fromEntries(new URLSearchParams(search));
+  // Dynamic route segments arrive as a single `orderId` param on Vercel.
+  const segments = pathname.replace(/^\/api\//, "").split("/").filter(Boolean);
+  if (segments.length === 2 && !query.orderId) query.orderId = segments[1];
+  return Object.assign(req, { query });
+}
+
+/**
+ * Vercel hands handlers an Express-flavoured response with `res.status()` and
+ * `res.json()`. Node's http response has neither, so the bridge adds them.
+ * The handlers themselves are unmodified and identical in both environments.
+ */
+function decorateRes(res) {
+  res.status = (code) => {
+    res.statusCode = code;
+    return res;
+  };
+  res.json = (payload) => {
+    res.end(JSON.stringify(payload));
+  };
+  return res;
+}
 
 export function jocApiDevServer() {
   return {
@@ -21,8 +72,16 @@ export function jocApiDevServer() {
         if (!req.url?.startsWith(API_PREFIX)) return next();
 
         try {
-          const { default: handler } = await import("../api" + routeFor(req.url));
-          await handler(decorate(req), res);
+          const file = routeFor(req.url);
+          // Resolve from the project root, not from this file: Vite bundles
+          // vite.config.js into node_modules/.vite-temp, so a relative import
+          // here would resolve against the wrong directory.
+          const base = pathToFileURL(path.join(server.config.root, "api", file)).href;
+          // Dev convenience: re-import on every request so handler edits apply
+          // without bouncing the server. Node treats each query as a new module.
+          const specifier = `${base}?v=${Date.now()}`;
+          const { default: handler } = await import(/* @vite-ignore */ specifier);
+          await handler(decorate(req), decorateRes(res));
         } catch (error) {
           server.config.logger.error(`[joc-api] ${error?.stack ?? error}`);
           res.statusCode = 500;
@@ -36,19 +95,4 @@ export function jocApiDevServer() {
       });
     },
   };
-}
-
-/** `/api/orders/JOC-1` -> `/orders/JOC-1` (strip the query string). */
-function routeFor(url) {
-  return url.split("?")[0].replace(/^\/api/, "") || "/";
-}
-
-/** Vercel gives handlers `req.query`; connect's raw request does not have it. */
-function decorate(req) {
-  const [pathname, search = ""] = req.url.split("?");
-  const query = Object.fromEntries(new URLSearchParams(search));
-  // Dynamic route segments arrive as a single `orderId` param on Vercel.
-  const segments = pathname.replace(/^\/api\//, "").split("/").filter(Boolean);
-  if (segments.length === 2 && !query.orderId) query.orderId = segments[1];
-  return Object.assign(req, { query });
 }

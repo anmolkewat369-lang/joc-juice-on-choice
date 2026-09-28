@@ -13,7 +13,13 @@
 
 import { ApiError, methodGuard, readJson, sendError, sendJson, clientKey } from "../_lib/http.js";
 import { getStore, toPublicOrder } from "../_lib/store.js";
-import { verifyPaymentSignature, fetchGatewayOrder, paiseToRupees } from "../_lib/razorpay.js";
+import {
+  verifyPaymentSignature,
+  fetchGatewayOrder,
+  paiseToRupees,
+  hasRazorpayCredentials,
+  isTestMode,
+} from "../_lib/razorpay.js";
 import { rateLimit, sweepRateLimits } from "../_lib/rateLimit.js";
 import { PAYMENT_METHOD, PAYMENT_STATUS, ORDER_STATUS } from "../../shared/ordering.js";
 
@@ -27,6 +33,17 @@ export default async function handler(req, res) {
     const gate = rateLimit({ key: `verify:${clientKey(req)}`, limit: 20, windowMs: 60_000 });
     if (!gate.allowed) {
       throw new ApiError(429, "Too many requests. Please try again shortly.", "rate_limited");
+    }
+
+    // Without a key secret nothing can be verified, so refuse up front rather
+    // than reporting a payment as unverified when the real cause is a
+    // half-configured deployment.
+    if (!hasRazorpayCredentials()) {
+      throw new ApiError(
+        503,
+        "Online payment is not available yet. Please choose Cash on Delivery.",
+        "payments_unavailable",
+      );
     }
 
     const body = await readJson(req);
@@ -69,6 +86,16 @@ export default async function handler(req, res) {
 
     // Confirm with the gateway itself rather than trusting the callback payload.
     const gatewayOrder = await fetchGatewayOrder(gatewayOrderId);
+    if (!gatewayOrder.paid || gatewayOrder.status !== "paid") {
+      // The signature and amount are consistent, but Razorpay has not actually
+      // captured money for this order. That can never be recorded as PAID.
+      await store.updatePayment(orderId, { paymentStatus: PAYMENT_STATUS.FAILED });
+      throw new ApiError(
+        400,
+        "The payment has not completed at the payment provider.",
+        "payment_not_completed",
+      );
+    }
     if (paiseToRupees(gatewayOrder.amount) !== order.total) {
       await store.updatePayment(orderId, { paymentStatus: PAYMENT_STATUS.FAILED });
       throw new ApiError(400, "The paid amount did not match the order total.", "amount_mismatch");
@@ -78,7 +105,9 @@ export default async function handler(req, res) {
       paymentStatus: PAYMENT_STATUS.PAID,
       razorpayPaymentId: paymentId,
       razorpaySignature: signature,
-      paymentMethodUsed: "razorpay",
+      // The order records whether the money actually moved: a test gateway
+      // payment is labeled as such at the source, not guessed at display time.
+      paymentMethodUsed: isTestMode() ? "razorpay_test" : "razorpay",
       orderStatus: order.order_status || ORDER_STATUS.RECEIVED,
     });
 

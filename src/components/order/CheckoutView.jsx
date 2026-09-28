@@ -131,7 +131,7 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
                   error={errors.name}
                   autoComplete="name"
                   maxLength={LIMITS.name}
-                  placeholder="e.g. Anmol Kewat"
+                  placeholder="e.g. Rahul Sharma"
                   required
                 />
                 <Field
@@ -210,13 +210,14 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
                 <AlertCircle size={17} aria-hidden="true" />
                 <span>
                   {flow.error.message}
-                  {flow.error.code === "payments_unavailable" ? (
+                  {flow.error.code === "payments_unavailable" && flow.pendingOrderId ? (
                     <>
                       {" "}
                       <button
                         type="button"
                         className={styles.alertAction}
-                        onClick={() => setForm((c) => ({ ...c, paymentMethod: PAYMENT_METHOD.COD }))}
+                        disabled={busy}
+                        onClick={() => flow.switchToCod(flow.pendingOrderId)}
                       >
                         Switch to Cash on Delivery
                       </button>
@@ -246,7 +247,9 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
               <p className={styles.trust}>
                 <Lock size={14} aria-hidden="true" />
                 {form.paymentMethod === PAYMENT_METHOD.ONLINE
-                  ? "Payment details go straight to the payment provider. We never see or store card details."
+                  ? flow.testMode
+                    ? "TEST MODE: this is a development payment on the Razorpay sandbox — no real money moves."
+                    : "Payment details go straight to the payment provider. We never see or store card details."
                   : "No advance payment. Pay the delivery partner when your order arrives."}
               </p>
             </div>

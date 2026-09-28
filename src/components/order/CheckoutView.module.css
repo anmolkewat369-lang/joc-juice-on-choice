@@ -256,6 +256,13 @@
   box-shadow: none;
 }
 
+/* The rest of the site uses :focus-visible only; the primary checkout button
+   always shows a ring while focused, so every user can see where they are. */
+.actions button[type="submit"]:focus {
+  box-shadow: var(--ring);
+  outline: none;
+}
+
 .trust {
   display: flex;
   align-items: flex-start;

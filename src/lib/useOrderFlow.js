@@ -44,6 +44,13 @@ export function useOrderFlow({ onComplete }) {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
   const [testMode, setTestMode] = useState(false);
+  /**
+   * An online order was created but the payment could not be started (for
+   * example no gateway is configured). The order exists server-side, so the
+   * checkout can offer to convert it to COD instead of pretending it never
+   * happened or letting the customer tap Pay Now again into the same wall.
+   */
+  const [pendingOrderId, setPendingOrderId] = useState(null);
   const idempotencyKey = useRef(null);
   const inFlight = useRef(false);
 
@@ -94,6 +101,7 @@ export function useOrderFlow({ onComplete }) {
 
         const paid = await runPayment({
           orderId: order.orderId,
+          setPendingOrderId,
           ui: { setFlow, setMessage, setTestMode, fail, setError, onComplete },
         });
         return paid.order;
@@ -119,6 +127,7 @@ export function useOrderFlow({ onComplete }) {
       try {
         return await runPayment({
           orderId,
+          setPendingOrderId,
           ui: { setFlow, setMessage, setTestMode, fail, setError, onComplete },
         });
       } catch (caught) {
@@ -141,6 +150,7 @@ export function useOrderFlow({ onComplete }) {
       try {
         const order = await abandonPayment({ orderId, paymentMethod: PAYMENT_METHOD.COD });
         setFlow(FLOW.IDLE);
+        setPendingOrderId(null);
         onComplete?.({ order, outcome: null, switchedToCod: true });
         return order;
       } catch (caught) {
@@ -159,9 +169,10 @@ export function useOrderFlow({ onComplete }) {
     setFlow(FLOW.IDLE);
     setError(null);
     setMessage(null);
+    setPendingOrderId(null);
   }, []);
 
-  return { flow, error, message, testMode, placeOrder, retryPayment, switchToCod, reset };
+  return { flow, error, message, testMode, pendingOrderId, placeOrder, retryPayment, switchToCod, reset };
 }
 
 /* -------------------------------- internals ------------------------------- */
@@ -171,14 +182,18 @@ export function useOrderFlow({ onComplete }) {
  * state. Resolves `{ order, outcome }` rather than throwing, because a dismissed
  * popup is a normal outcome and not an error.
  */
-async function runPayment({ orderId, ui }) {
+async function runPayment({ orderId, setPendingOrderId, ui }) {
   const session = await startPayment(orderId).catch((caught) => {
+    // The order exists but the customer cannot pay right now (typically no
+    // gateway configured). Remember the order so the UI can convert it to COD.
+    if (caught?.code === "payments_unavailable") setPendingOrderId(orderId);
     ui.fail(caught);
     return null;
   });
   if (!session) return { order: { orderId }, outcome: null };
 
   ui.setTestMode(Boolean(session.testMode));
+  setPendingOrderId(null);
 
   return new Promise((resolve) => {
     openCheckout(session, {

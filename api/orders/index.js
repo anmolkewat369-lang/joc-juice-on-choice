@@ -15,7 +15,8 @@ export default async function handler(req, res) {
 
   try {
     sweepRateLimits();
-    const gate = rateLimit({ key: `order:${clientKey(req)}`, limit: 12, windowMs: 60_000 });
+    // Generous enough for a shared campus/office IP, tight enough to stop a flood.
+    const gate = rateLimit({ key: `order:${clientKey(req)}`, limit: 20, windowMs: 60_000 });
     if (!gate.allowed) {
       throw new ApiError(
         429,

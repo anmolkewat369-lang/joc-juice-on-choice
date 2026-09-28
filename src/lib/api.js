@@ -19,7 +19,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function request(path, { method = "GET", body, idempotencyKey, signal } = {}) {
+async function request(path, { method = "GET", body, idempotencyKey, signal, headers = {} } = {}) {
   let response;
   try {
     response = await fetch(path, {
@@ -28,6 +28,7 @@ async function request(path, { method = "GET", body, idempotencyKey, signal } = 
       headers: {
         ...(body ? { "Content-Type": "application/json" } : {}),
         ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+        ...headers,
       },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -101,8 +102,12 @@ export const getOrder = (orderId, { signal } = {}) => {
       }),
     );
   }
-  return request(`/api/orders/${encodeURIComponent(orderId)}?token=${encodeURIComponent(token)}`, {
+  // The secret travels in a header, not the query string, so it never lands in
+  // server access logs. getAccessToken() on the server also accepts `?token=`
+  // for links that were intentionally shared.
+  return request(`/api/orders/${encodeURIComponent(orderId)}`, {
     signal,
+    headers: { "X-Order-Token": token },
   }).then((data) => data.order);
 };
 

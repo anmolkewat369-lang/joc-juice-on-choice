@@ -16,6 +16,7 @@ import {
   DELIVERY_LABEL,
   PAYMENT_METHOD,
   PAYMENT_METHOD_LABELS,
+  PAYMENT_METHOD_USED_LABELS,
   PAYMENT_STATUS,
 } from "../../../shared/ordering.js";
 import { getOrder } from "../../lib/api";
@@ -196,7 +197,12 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
           </div>
           <div>
             <dt>Payment</dt>
-            <dd>{cod ? PAYMENT_METHOD_LABELS.COD : PAYMENT_METHOD_LABELS.ONLINE}</dd>
+            <dd>
+              {cod
+                ? PAYMENT_METHOD_LABELS.COD
+                : PAYMENT_METHOD_USED_LABELS[order.paymentMethodUsed] ??
+                  PAYMENT_METHOD_LABELS.ONLINE}
+            </dd>
           </div>
           <div>
             <dt>Payment status</dt>
@@ -238,6 +244,13 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
             </p>
           ) : null}
         </div>
+
+        {order.paymentMethodUsed === "razorpay_test" ? (
+          <p className={styles.notice}>
+            This was a <strong>TEST payment</strong> in the development playground — no real money
+            was charged.
+          </p>
+        ) : null}
 
         {storageNotice ? <p className={styles.notice}>{storageNotice}</p> : null}
 

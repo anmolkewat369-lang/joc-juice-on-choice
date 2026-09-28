@@ -84,6 +84,16 @@ export const PAYMENT_METHOD_LABELS = {
   [PAYMENT_METHOD.ONLINE]: "Paid Online",
 };
 
+/**
+ * How an online order was actually settled. `razorpay_test` means a test
+ * gateway key was used and no real money moved — the confirmation screen must
+ * say so plainly, because the customer chose a payment method, not a sandbox.
+ */
+export const PAYMENT_METHOD_USED_LABELS = {
+  razorpay: "Paid Online",
+  razorpay_test: "Paid Online (TEST — no real money was charged)",
+};
+
 /* -------------------------------- Pricing -------------------------------- */
 
 /** Rupees, minor units, integers only — no paise handling needed. */

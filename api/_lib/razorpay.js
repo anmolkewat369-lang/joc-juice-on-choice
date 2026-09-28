@@ -16,14 +16,27 @@ import { BRAND } from "../../src/data/business.js";
 const API_BASE = "https://api.razorpay.com/v1";
 
 /**
- * Test mode is the default and is a deliberate safety rail: live payments are
- * only possible when the key id itself is a live key. See `paymentConfig()`.
+ * Test mode is the default and is a deliberate safety rail. The key id must
+ * match the mode: a `rzp_test_…` key cannot be used to take real money, and a
+ * `rzp_live_…` key is rejected while test mode is still on. Live payments are
+ * only possible when both the environment says so AND a live key is present.
  */
 export const isTestMode = () =>
   String(process.env.RAZORPAY_TEST_MODE ?? "true").toLowerCase() !== "false";
 
+export const EXPECTED_KEY_PREFIX = () => (isTestMode() ? "rzp_test_" : "rzp_live_");
+
 export function hasRazorpayCredentials() {
-  return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+  const id = process.env.RAZORPAY_KEY_ID ?? "";
+  if (!id || !process.env.RAZORPAY_KEY_SECRET) return false;
+  const modeOk = id.startsWith(EXPECTED_KEY_PREFIX());
+  if (!modeOk) {
+    console.warn(
+      `[joc-api] RAZORPAY_KEY_ID does not look like a ${EXPECTED_KEY_PREFIX()}… key. ` +
+        "Payment is refusing to run until the key matches RAZORPAY_TEST_MODE.",
+    );
+  }
+  return modeOk;
 }
 
 /** Values the browser needs. The secret is not, and cannot, be in here. */
@@ -118,6 +131,8 @@ export async function fetchGatewayOrder(razorpayOrderId) {
  * own success callback proves nothing on its own.
  */
 export function verifyPaymentSignature({ orderId, paymentId, signature }) {
+  // Fail closed: without a secret nothing can be verified, so nothing is verified.
+  if (!process.env.RAZORPAY_KEY_SECRET) return false;
   if (!orderId || !paymentId || !signature) return false;
 
   const expected = createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)

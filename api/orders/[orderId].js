@@ -14,9 +14,9 @@ import {
   sendError,
   sendJson,
   clientKey,
-} from "../../_lib/http.js";
-import { getStore, toPublicOrder, hashAccessToken } from "../../_lib/store.js";
-import { rateLimit, sweepRateLimits } from "../../_lib/rateLimit.js";
+} from "../_lib/http.js";
+import { getStore, toPublicOrder, hashAccessToken } from "../_lib/store.js";
+import { rateLimit, sweepRateLimits } from "../_lib/rateLimit.js";
 import { timingSafeEqual } from "node:crypto";
 
 const ORDER_ID_RE = /^JOC-\d{8}-\d{4,}$/i;
@@ -41,12 +41,16 @@ export default async function handler(req, res) {
     const orderId = Array.isArray(raw) ? raw[0] : String(raw);
     if (!ORDER_ID_RE.test(orderId)) throw notFound();
 
-    const token = req.query?.token;
-    if (typeof token !== "string" || token.length < 16) throw notFound();
+    // Preferred: X-Order-Token header (keeps the secret out of access logs).
+    // Fallback: ?token= for deep links that were deliberately shared.
+    const token = req.headers?.["x-order-token"] || req.headers?.["X-Order-Token"];
+    const queryToken = req.query?.token;
+    const provided = typeof token === "string" && token.length > 0 ? token : queryToken;
+    if (typeof provided !== "string" || provided.length < 16) throw notFound();
 
     const store = await getStore();
     const row = await store.getOrder(orderId.toUpperCase());
-    if (!row || !tokenMatches(row.access_hash, token)) throw notFound();
+    if (!row || !tokenMatches(row.access_hash, provided)) throw notFound();
 
     return sendJson(res, 200, { order: toPublicOrder(row) });
   } catch (error) {

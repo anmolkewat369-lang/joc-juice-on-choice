@@ -17,7 +17,7 @@
  * database.
  */
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { formatOrderId, ORDER_STATUS, PAYMENT_STATUS, CURRENCY } from "../../shared/ordering.js";
 import { AUTO_MIGRATE_SQL } from "./schema.js";
 
@@ -177,15 +177,42 @@ function createPostgresStore() {
 
 /* --------------------------------- memory --------------------------------- */
 
+/**
+ * Mirrors the memory driver onto the same snake_case row shape Postgres
+ * returns, so both drivers share one mapping in `toPublicOrder` and the
+ * non-durable mode can never diverge from the durable one.
+ */
+const toRow = (record) => ({
+  id: randomUUID(),
+  order_seq: null,
+  order_id: null,
+  idempotency_key: null,
+  access_hash: hashAccessToken(record.accessToken),
+  customer_name: record.customerName,
+  phone: record.phone,
+  address: record.address,
+  landmark: record.landmark,
+  special_instructions: record.specialInstructions,
+  items: record.items,
+  subtotal: record.subtotal,
+  delivery_charge: record.deliveryCharge,
+  total: record.total,
+  currency: record.currency,
+  payment_method: record.paymentMethod,
+  payment_status: record.paymentStatus,
+  order_status: record.orderStatus,
+  razorpay_order_id: null,
+  razorpay_payment_id: null,
+  razorpay_signature: null,
+  payment_method_used: null,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+});
+
 function createMemoryStore() {
   const orders = new Map(); // orderId -> row
   const byKey = new Map(); // idempotencyKey -> orderId
   let sequence = 0;
-
-  const hydrate = (row) => ({
-    ...row,
-    items: typeof row.items === "string" ? JSON.parse(row.items) : row.items,
-  });
 
   return {
     driver: "memory",
@@ -196,18 +223,10 @@ function createMemoryStore() {
       if (replayId) return { order: orders.get(replayId), created: false };
 
       sequence += 1;
-      const createdAt = new Date();
-      const row = hydrate({
-        ...record,
-        order_seq: sequence,
-        order_id: formatOrderId(createdAt, sequence),
-        created_at: createdAt.toISOString(),
-        updated_at: createdAt.toISOString(),
-        razorpay_order_id: null,
-        razorpay_payment_id: null,
-        razorpay_signature: null,
-        payment_method_used: null,
-      });
+      const row = toRow(record);
+      row.order_seq = sequence;
+      row.order_id = formatOrderId(new Date(row.created_at), sequence);
+      row.idempotency_key = idempotencyKey;
       orders.set(row.order_id, row);
       byKey.set(idempotencyKey, row.order_id);
       return { order: row, created: true };
@@ -269,6 +288,18 @@ export async function getStore() {
       console.log("[joc-api] order storage: postgres (durable)");
       return createPostgresStore();
     }
+
+    // On Vercel production a missing database must never mean "orders vanish
+    // on the next deploy". Refuse the server instead: nothing gets silently
+    // accepted and forgotten. Local dev and preview builds keep the honest
+    // memory fallback for trying the flow out.
+    const isProduction = process.env.VERCEL_ENV === "production";
+    if (isProduction && process.env.JOC_ALLOW_MEMORY_STORE !== "true") {
+      throw new Error(
+        "[joc-api] DATABASE_URL is required in production. Orders would not persist, so the API is refusing to run.",
+      );
+    }
+
     console.warn(
       "[joc-api] DATABASE_URL is not set — orders are being held in memory for this " +
         "instance only. They are NOT saved. Set DATABASE_URL before launch.",
