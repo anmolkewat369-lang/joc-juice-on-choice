@@ -1,0 +1,252 @@
+.page {
+  padding-top: calc(var(--nav-h) + clamp(1.5rem, 1rem + 3vw, 3.5rem));
+  background: var(--paper-warm);
+  min-height: 70vh;
+}
+
+.wrap {
+  max-width: 720px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.9rem;
+  padding: clamp(1.4rem, 1.1rem + 1.6vw, 2.4rem);
+  border-radius: var(--radius-xl);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line-strong), var(--shadow-md);
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-xl);
+  background: var(--paper-tint);
+  color: var(--ink-400);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.markGood {
+  background: var(--lime-300);
+  color: var(--green-800);
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+.markWarn {
+  background: #fdf2e7;
+  color: var(--orange-600);
+  box-shadow: inset 0 0 0 1px #f3ddc8;
+}
+
+.title {
+  font-size: var(--fs-h3);
+  line-height: 1.15;
+  outline: none;
+}
+
+.lead {
+  color: var(--ink-500);
+  font-size: var(--fs-lead);
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: clamp(1.4rem, 1.1rem + 1.6vw, 2.4rem);
+  border-radius: var(--radius-xl);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink-500);
+}
+
+/* --------------------------------- Facts --------------------------------- */
+
+.facts {
+  display: grid;
+  gap: 0.55rem 1.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-lg);
+  background: var(--paper-tint);
+}
+
+.facts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.facts dt {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+}
+
+.facts dd {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.orderId {
+  font-family: var(--font-head);
+  letter-spacing: 0.02em;
+}
+
+/* --------------------------------- Items --------------------------------- */
+
+.items {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.items h2 {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.items ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+}
+
+.items li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+}
+
+.items li span:last-child {
+  flex: none;
+  font-weight: 600;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.qty {
+  color: var(--ink-400);
+}
+
+.itemTotals {
+  font-size: var(--fs-xs);
+  color: var(--ink-400);
+}
+
+/* -------------------------------- Address -------------------------------- */
+
+.address {
+  width: 100%;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.address h2 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.address p {
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+  line-height: 1.6;
+}
+
+.phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.instructions {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--line);
+  font-size: var(--fs-sm);
+}
+
+.instructions span {
+  font-weight: 600;
+  color: var(--ink-800);
+}
+
+.notice {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius-md);
+  background: #fdf2e7;
+  box-shadow: inset 0 0 0 1px #f3ddc8;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  color: #9a4415;
+}
+
+/* -------------------------------- Actions -------------------------------- */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  width: 100%;
+  padding-top: 0.3rem;
+}
+
+.actions button[disabled] {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+@media (min-width: 560px) {
+  .facts {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .facts > div {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+  }
+
+  .facts dd {
+    text-align: left;
+  }
+}

@@ -1,4 +1,5 @@
 import FoodArt from "./FoodArt";
+import AddToCartButton from "./cart/AddToCartButton";
 import { formatPrice } from "../data/menu";
 import styles from "./MenuCard.module.css";
 
@@ -24,7 +25,12 @@ const BADGE_CLASS = {
   Combos: styles.badgeCombo,
 };
 
-export default function MenuCard({ item, variant = "default", headingLevel: Heading = "h3" }) {
+export default function MenuCard({
+  item,
+  variant = "default",
+  headingLevel: Heading = "h3",
+  orderable = true,
+}) {
   const variantClass = styles[variant] ? ` ${styles[variant]}` : "";
 
   return (
@@ -59,6 +65,12 @@ export default function MenuCard({ item, variant = "default", headingLevel: Head
             {formatPrice(item.price)}
           </span>
         </div>
+
+        {orderable ? (
+          <div className={styles.order}>
+            <AddToCartButton item={item} />
+          </div>
+        ) : null}
       </div>
     </article>
   );

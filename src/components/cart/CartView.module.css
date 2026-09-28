@@ -1,0 +1,293 @@
+.page {
+  padding-top: calc(var(--nav-h) + clamp(1.5rem, 1rem + 3vw, 3.5rem));
+  background: var(--paper-warm);
+  min-height: 70vh;
+}
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.5rem, 1rem + 2vw, 2.5rem);
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  max-width: 56ch;
+}
+
+.head h1 {
+  font-size: var(--fs-h2);
+}
+
+.head p {
+  color: var(--ink-500);
+  font-size: var(--fs-lead);
+}
+
+.layout {
+  display: grid;
+  gap: clamp(1.25rem, 0.9rem + 1.6vw, 2rem);
+  align-items: start;
+}
+
+/* --------------------------------- Lines --------------------------------- */
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.line {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.05rem 1.1rem;
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow-sm);
+}
+
+.lineMain {
+  min-width: 0;
+}
+
+.lineName {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.lineSize {
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+}
+
+.lineMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.45rem;
+}
+
+.chip {
+  font-size: 0.68rem;
+  padding: 0.24rem 0.6rem;
+}
+
+.unit {
+  font-size: var(--fs-xs);
+  color: var(--ink-400);
+}
+
+.lineControls {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.lineTotal {
+  margin-left: auto;
+  font-family: var(--font-head);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--green-700);
+  font-variant-numeric: tabular-nums;
+}
+
+.remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.1rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-400);
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.remove:hover {
+  color: var(--berry-600);
+}
+
+/* -------------------------------- Summary -------------------------------- */
+
+.summary {
+  position: sticky;
+  top: calc(var(--nav-h) + 1rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.35rem 1.4rem 1.5rem;
+  border-radius: var(--radius-xl);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line-strong), var(--shadow-md);
+}
+
+.summaryTitle {
+  font-size: 1.1rem;
+}
+
+.totals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.totals > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: var(--fs-sm);
+  color: var(--ink-500);
+}
+
+.totals dt,
+.totals dd {
+  margin: 0;
+}
+
+.totals dd {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.grand {
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+  font-size: 1rem !important;
+}
+
+.grand dt {
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.grand dd {
+  font-family: var(--font-head);
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--green-700);
+  letter-spacing: -0.02em;
+}
+
+.deliveryNote {
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  color: var(--ink-400);
+}
+
+.checkout {
+  margin-top: 0.15rem;
+}
+
+.clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-400);
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.clear:hover {
+  color: var(--berry-600);
+}
+
+.back {
+  font-size: var(--fs-xs);
+  color: var(--ink-400);
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.back:hover {
+  color: var(--green-700);
+}
+
+/* ------------------------------ Empty state ------------------------------ */
+
+.emptyPage {
+  display: grid;
+  place-items: center;
+}
+
+.emptyWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  text-align: center;
+  max-width: 42ch;
+  padding-block: clamp(2rem, 1.5rem + 4vw, 5rem);
+}
+
+.emptyMark {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: var(--radius-xl);
+  background: var(--paper-tint);
+  color: var(--green-600);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.emptyWrap h1 {
+  font-size: var(--fs-h3);
+}
+
+.emptyWrap p {
+  color: var(--ink-500);
+}
+
+/* ------------------------------ Breakpoints ------------------------------ */
+
+@media (min-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+
+  .line {
+    flex-direction: row;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .lineMain {
+    flex: 1;
+  }
+
+  .lineControls {
+    padding-top: 0;
+    border-top: 0;
+    flex: none;
+  }
+
+  .lineTotal {
+    margin-left: 0;
+    min-width: 5.5rem;
+    text-align: right;
+  }
+}

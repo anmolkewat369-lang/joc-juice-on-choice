@@ -1,6 +1,7 @@
-import { ArrowRight, MapPin, Sparkles } from "lucide-react";
+import { ArrowRight, MapPin, ShoppingBag, Sparkles } from "lucide-react";
 import FoodArt from "./FoodArt";
 import { BRAND, DISCLAIMER_SHORT } from "../data/business";
+import { cartHref } from "../lib/route";
 import styles from "./Hero.module.css";
 
 const COMPOSITION = [
@@ -35,6 +36,10 @@ export default function Hero() {
             <a className="btn btn--primary btn--lg" href="#menu">
               Explore Menu
               <ArrowRight size={18} aria-hidden="true" />
+            </a>
+            <a className="btn btn--ghost btn--lg" href={cartHref}>
+              <ShoppingBag size={18} aria-hidden="true" />
+              Order Now
             </a>
             <a className="btn btn--ghost btn--lg" href="#location">
               <MapPin size={18} aria-hidden="true" />

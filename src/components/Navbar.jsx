@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import { MapPin, Menu as MenuIcon, X, MessageCircle } from "lucide-react";
+import { MapPin, Menu as MenuIcon, X, MessageCircle, ShoppingBag } from "lucide-react";
 import { BRAND, NAV_LINKS, WHATSAPP_URL } from "../data/business";
+import { useCart } from "../cart/cartStore";
+import { cartHref } from "../lib/route";
 import styles from "./Navbar.module.css";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState("#home");
+  const { count, isEmpty } = useCart();
 
   const closeMenu = () => setOpen(false);
 
@@ -99,6 +102,17 @@ export default function Navbar() {
 
         <div className={styles.actions}>
           <a
+            className={styles.cart}
+            href={cartHref}
+            aria-label={isEmpty ? "Cart, empty" : `Cart, ${count} ${count === 1 ? "item" : "items"}`}
+          >
+            <ShoppingBag size={19} aria-hidden="true" />
+            <span className={styles.cartLabel}>Cart</span>
+            <span className={styles.badge} data-empty={isEmpty} aria-hidden="true">
+              {count}
+            </span>
+          </a>
+          <a
             className={`btn btn--primary ${styles.enquire}`}
             href={WHATSAPP_URL}
             target="_blank"
@@ -134,6 +148,11 @@ export default function Navbar() {
                 </a>
               </li>
             ))}
+            <li>
+              <a className={styles.mobileLink} href={cartHref} onClick={closeMenu}>
+                Cart{isEmpty ? "" : ` (${count})`}
+              </a>
+            </li>
           </ul>
         </nav>
         <div className={styles.mobileActions}>
