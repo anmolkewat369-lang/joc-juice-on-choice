@@ -122,13 +122,14 @@ function createPostgresStore() {
       );
 
       if (rows.length > 0) {
-        const [order] = await run(
+        const { rows: updatedRows } = await run(
           `update joc_orders
               set order_id = $1
             where id = $2
             returning *`,
           [formatOrderId(rows[0].created_at, rows[0].order_seq), rows[0].id],
         );
+        const order = updatedRows[0];
         return { order, created: true };
       }
 
