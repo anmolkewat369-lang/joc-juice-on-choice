@@ -30,11 +30,26 @@ npm run dev      # dev server + local /api bridge (dev/jocApiDevServer.js)
 npm run build    # production build to dist/
 npm run preview  # serve the production build
 npm run lint     # oxlint
+npm test         # guard-rule + QR encoder checks (no database needed)
 ```
 
 Without `DATABASE_URL` the API runs in a clearly-labelled **in-memory demo** mode
 (survives only for the lifetime of the dev server) and every order response is
 tagged `storage.durable: false`. No order is ever fake-stored.
+
+## Checks
+
+There is no test runner. `npm test` runs two plain Node scripts; every check runs
+even if an earlier one fails, and the process exits non-zero if any failed. Both
+work against the in-memory store, so neither needs a database or a network.
+
+| Script | What it pins down |
+| --- | --- |
+| `dev/checkGuards.mjs` | 48 checks over the guard rules: order-token ownership, UTR normalisation, admin auth (unauthenticated, forged cookie, no session secret), status-transition legality, `PAID` reachable only by admin, and that COD never asks the customer to pay online |
+| `dev/checkQr.mjs` | Decodes the server-generated UPI QR with **jsQR** — an independent implementation — across every payload length 1..213, several error-correction levels, and realistic `upi://pay` intent strings |
+
+The QR encoder in `api/_lib/qr.js` is hand-written, so it is deliberately checked
+against a decoder that is not itself rather than against its own output.
 
 ## How ordering works
 
@@ -80,6 +95,13 @@ tagged `storage.durable: false`. No order is ever fake-stored.
 | POST | `/api/payments/create` | Start a gateway session for an order |
 | POST | `/api/payments/verify` | Server-verified payment success |
 | POST | `/api/payments/cancel` | Mark failed/cancelled, or convert to COD |
+| POST | `/api/admin/login` / `/api/admin/session` | Supabase sign-in and session probe for `/admin` |
+| GET | `/api/admin/orders` | Admin order list, filters, counts, pagination |
+| GET/PATCH | `/api/admin/orders/:orderId` | Order detail, verify a UTR, advance order status |
+
+Admin routes require a valid session cookie and fail closed with a 500-style
+`ApiError` when `JOC_ADMIN_SESSION_SECRET` is unset. `/admin` is a real path, not
+a hash route, and `vercel.json` sends `X-Robots-Tag: noindex` on it.
 
 ## Environment
 
@@ -107,6 +129,23 @@ Copy `.env.example` → `.env.local` for local development. All values are
 > malformed. `GET /api/payments/methods` reports exactly what the server offers,
 > which is the fastest way to confirm a deployment's configuration.
 
+### What is and is not a secret
+
+Only four things here are secret: `DATABASE_URL` (it embeds the DB password),
+`JOC_ADMIN_SESSION_SECRET`, `RESEND_API_KEY`, and `RAZORPAY_KEY_SECRET` — the
+last only if you ever enable Razorpay. Commit none of them.
+
+`JOC_UPI_ID` and `SUPABASE_ANON_KEY` look sensitive but are not:
+`JOC_UPI_ID` is printed on the checkout page and embedded in the payment QR by
+design, and the Supabase anon key only allows exchanging a password for a
+session, with RLS enabled and no policies so it cannot read a single row.
+
+`.env`, `.env.local` and `.env*.local` are git-ignored and `.env.example` is the
+only environment file tracked in the repository. Nothing under this project
+should ever carry a real key. The Razorpay *publishable* key id is not a secret
+either, and it is deliberately absent from the browser bundle: `/api/payments/create`
+serves it per request.
+
 ### Setup steps
 
 1. **Database (Supabase)**: create a project, copy its Postgres connection string
@@ -129,13 +168,17 @@ Copy `.env.example` → `.env.local` for local development. All values are
 
 ```
 api/            Vercel serverless functions (orders + payments)
+api/_lib/       Shared server code: store, schema, payments, QR, admin auth, notify
+api/admin/      Admin-only routes (login, session, order list/detail)
 db/schema.sql   Postgres schema (orders table, indexes, updated trigger)
+db/migrations/  Ordered migrations for an existing database (002 payment/admin, 003 COD)
 shared/         Contract imported by frontend and API
+src/admin/      Admin dashboard (lazy-loaded; never requested by a customer)
 src/cart/       Cart context, localStorage persistence
 src/lib/        Hash routing, API client, Razorpay loader, order flow state machine
 src/components/cart/    Cart page
 src/components/order/   Checkout + confirmation/failure screens
-dev/            Local-only /api bridge for the Vite dev server
+dev/            Local-only /api bridge for the Vite dev server, plus npm test checks
 ```
 
 ## Editing the content
@@ -189,15 +232,22 @@ name, address and category — no phone, no opening hours, no aggregate rating.
 1. Confirm the menu, prices and item descriptions with the client.
 2. Confirm the **final delivery pricing** and set it in `shared/ordering.js`;
    the current ₹20 flat charge and its note are placeholders.
-3. Confirm the **production order-handling process** (who receives orders and how.
+3. Confirm the **production order-handling process** (who receives orders, and how).
 4. Replace the illustrations with real photography.
 5. Replace the temporary wordmark with the official logo.
 6. Swap the developer's contact details for the business's own, in
    `src/data/business.js`.
 7. Create the production Supabase project and add `DATABASE_URL`.
-8. Create the production Razorpay account, add live keys, and only then set
-   `RAZORPAY_TEST_MODE=false`. Run a real ₹2 test payment first.
-9. Add the live domain as `<link rel="canonical">` and a real 1200×630 OG image.
-10. Remove the concept/demo wording from the hero, contact section and footer.
-11. Add an admin view of `joc_orders` (Supabase Table Editor works) and decide the
-    order-status workflow (`RECEIVED → … → DELIVERED` is already modelled).
+8. Confirm `JOC_UPI_ID` on the production deployment by reading
+   `GET /api/payments/methods` — it should report `provider: manual_upi` with
+   both Cash on Delivery and UPI available.
+9. Run `npm test` and `npm run lint` against the final state.
+10. Add the live domain as `<link rel="canonical">` and a real 1200×630 OG image.
+11. Remove the concept/demo wording from the hero, contact section and footer.
+12. Decide the order-status workflow (`RECEIVED → … → DELIVERED` is already
+    modelled and enforced server-side, and editable from `/admin/orders`).
+
+> Razorpay is **not** required to go live. It stays behind the provider
+> abstraction; only set `JOC_PAYMENT_PROVIDER=razorpay`, add the key pair and set
+> `RAZORPAY_TEST_MODE=false` if you later decide to use it instead. Run a real ₹2
+> test payment first.

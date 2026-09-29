@@ -1,7 +1,8 @@
 /**
  * Guard-rule checks for the manual-UPI + admin flow, run against the in-memory
  * store so they need no database. Written as a plain script because the project
- * has no test runner configured yet; it exits non-zero on the first failure.
+ * has no test runner configured yet; every check runs even if an earlier one
+ * fails, and the script exits non-zero if any of them failed.
  */
 
 import assert from "node:assert/strict";
