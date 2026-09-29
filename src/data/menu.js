@@ -31,6 +31,7 @@ export const CATEGORIES = [
   "Juices",
   "Shakes",
   "Coffee",
+  "Tea",
   "Sandwiches",
   "Momos",
   "Pasta",
@@ -185,6 +186,18 @@ export const MENU_ITEMS = [
     art: "coldCoffee",
     tone: "oreo",
     image: null, // set to "/images/oreo-cold-coffee.jpg" when a real photo is supplied
+  },
+
+  /* --------------------------------- TEA --------------------------------- */
+  {
+    id: "tea-one-cup",
+    name: "One Cup Tea",
+    category: "Tea",
+    price: 1,
+    description: "One cup of tea",
+    art: "coffee",
+    tone: "hot",
+    image: null,
   },
 
   /* ----------------------------- SANDWICHES ----------------------------- */
