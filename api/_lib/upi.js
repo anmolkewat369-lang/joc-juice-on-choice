@@ -21,8 +21,33 @@ import { BRAND } from "../../src/data/business.js";
  */
 const UPI_ID_RE = /^[A-Za-z0-9._-]{2,256}@[A-Za-z0-9._-]{2,64}$/;
 
-/** A payment note the customer will actually read on their phone. */
-const noteFor = (order) => `JOC ${order.order_id}`.slice(0, 48);
+/**
+ * Normalise a UPI ID read from configuration.
+ *
+ * A value pasted into a dashboard or a .env file arrives with whatever
+ * whitespace and quoting the operator's tooling added, and an untrimmed
+ * " 9630194023@pthdfc " or a quoted "9630194023@pthdfc" is silently not a UPI ID
+ * at all. That would present as "online payment unavailable" with nothing wrong
+ * in the dashboard, so both are stripped before the value is judged. Nothing
+ * inside the ID is altered.
+ */
+export function normaliseUpiId(raw) {
+  const text = String(raw ?? "").trim();
+  const quoted = /^(['"])([\s\S]*)\1$/.exec(text);
+  return quoted ? quoted[2].trim() : text;
+}
+
+/**
+ * The payment note the customer reads in their own UPI app, and which lands in
+ * JOC's bank statement as the payment remark.
+ *
+ * It takes the order id directly. It used to take a whole order object and read
+ * `order.order_id`, but every caller passed `{ orderId }` — so the note was
+ * literally "JOC undefined" in the customer's app and in the bank statement. An
+ * unreadable remark makes a customer distrust a payment they can otherwise see
+ * is going to the right UPI ID.
+ */
+const noteFor = (orderId) => `JOC ${orderId ?? ""}`.trim().slice(0, 48);
 
 /**
  * Payee name shown in the customer's UPI app.
@@ -42,7 +67,8 @@ const payeeName = () => BRAND.name;
  * is a wrong amount. `pa` (the UPI ID) and `am` (the amount) are never dropped.
  */
 export function buildUpiIntent({ upiId, payeeName: payee, amount, orderId, currency = "INR" }) {
-  if (!UPI_ID_RE.test(String(upiId ?? ""))) {
+  const payeeUpiId = normaliseUpiId(upiId);
+  if (!UPI_ID_RE.test(payeeUpiId)) {
     throw new Error("JOC_UPI_ID is not a valid UPI ID. Payments cannot be offered.");
   }
   const total = Math.round(Number(amount));
@@ -54,12 +80,12 @@ export function buildUpiIntent({ upiId, payeeName: payee, amount, orderId, curre
   const optional = [
     ["cu", currency],
     ["pn", name],
-    ["tn", noteFor({ orderId })],
+    ["tn", noteFor(orderId)],
     ["tr", String(orderId ?? "").slice(0, 40)],
   ].filter(([, value]) => value);
 
   const required = [
-    ["pa", String(upiId)],
+    ["pa", payeeUpiId],
     ["am", total.toFixed(2)],
   ];
 
@@ -75,12 +101,12 @@ export function buildUpiIntent({ upiId, payeeName: payee, amount, orderId, curre
   }
 
   return {
-    vpa: String(upiId),
+    vpa: payeeUpiId,
     payeeName: name,
     amount: total,
     currency,
     orderId: orderId ?? null,
-    note: noteFor({ orderId }),
+    note: noteFor(orderId),
     reference: orderId ?? null,
     uri,
     /** Inline SVG — no third-party image request carries the payment address. */
@@ -91,4 +117,4 @@ export function buildUpiIntent({ upiId, payeeName: payee, amount, orderId, curre
 const buildUri = (pairs) => `upi://pay?${pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}`;
 
 /** Is a UPI ID configured well enough to offer manual UPI at all? */
-export const isUpiConfigured = (upiId) => UPI_ID_RE.test(String(upiId ?? ""));
+export const isUpiConfigured = (upiId) => UPI_ID_RE.test(normaliseUpiId(upiId));

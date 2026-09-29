@@ -174,19 +174,24 @@ export const PAYMENT_METHOD_LABELS = {
 };
 
 /**
- * How a digital payment actually settled. `payment_provider` is stored
- * separately from `payment_method` so switching settlement rails later does not
- * require touching what the customer chose.
+ * Which rail settles the payment, stored as `payment_provider` and kept separate
+ * from `payment_method` so switching settlement rails later does not require
+ * touching what the customer chose.
  *
+ *   cod         — no rail. Cash handed to the delivery partner on arrival. A
+ *                 label, not a configuration: it is always available and needs
+ *                 no account, credential or UPI ID.
  *   manual_upi  — customer paid to a UPI ID on their own; verified by an admin.
  *   razorpay    — customer paid through Razorpay Checkout; verified by signature.
  */
 export const PAYMENT_PROVIDER = {
+  COD: "cod",
   MANUAL_UPI: "manual_upi",
   RAZORPAY: "razorpay",
 };
 
 export const PAYMENT_PROVIDER_LABELS = {
+  [PAYMENT_PROVIDER.COD]: "Cash on Delivery",
   [PAYMENT_PROVIDER.MANUAL_UPI]: "Manual UPI (verified by JOC)",
   [PAYMENT_PROVIDER.RAZORPAY]: "Razorpay",
   razorpay_test: "Razorpay (TEST — no real money was charged)",

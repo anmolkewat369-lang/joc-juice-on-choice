@@ -128,10 +128,17 @@ export const getOrderDetail = (orderId, { signal } = {}) => {
  * newly configured rail appears without a frontend release.
  */
 export const getPaymentMethods = ({ signal } = {}) =>
-  request("/api/payments/methods", { signal }).then((data) => ({
-    provider: data.provider,
-    digital: data.methods.find((entry) => entry.method !== "COD") ?? null,
-  }));
+  request("/api/payments/methods", { signal }).then((data) => {
+    const digital = data.methods.find((entry) => entry.method !== "COD") ?? null;
+    return {
+      provider: data.provider,
+      digital,
+      // The UPI ID the customer should pay, when the server is offering manual
+      // UPI. It is a payment address rather than a credential, and it arrives
+      // from the server so checkout can never show a stale or invented one.
+      vpa: digital?.vpa ?? null,
+    };
+  });
 
 /**
  * Every payment call carries the order's own secret.

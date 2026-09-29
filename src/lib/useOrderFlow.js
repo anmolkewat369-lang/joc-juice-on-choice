@@ -53,30 +53,37 @@ export function useOrderFlow({ onComplete }) {
    */
   const [pendingOrderId, setPendingOrderId] = useState(null);
   /**
-   * Whether a digital payment is offered, and which rail settles it.
+   * Whether a digital payment is offered, which rail settles it, and — for
+   * manual UPI — the UPI ID the customer should pay.
    *
    * Starts as "unknown, assume unavailable" so the checkout can never briefly
    * offer a payment the server has not confirmed it can take. Cash on Delivery is
    * always available, so an unreachable capability endpoint degrades to a
    * working checkout rather than a broken one.
    */
-  const [digitalPayment, setDigitalPayment] = useState({ available: false, provider: null, loaded: false });
+  const [digitalPayment, setDigitalPayment] = useState({
+    available: false,
+    provider: null,
+    vpa: null,
+    loaded: false,
+  });
   const idempotencyKey = useRef(null);
   const inFlight = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
     getPaymentMethods({ signal: controller.signal })
-      .then(({ provider, digital }) => {
+      .then(({ provider, digital, vpa }) => {
         setDigitalPayment({
           available: Boolean(digital?.available),
           provider: digital?.provider ?? provider ?? null,
+          vpa: vpa ?? null,
           loaded: true,
         });
       })
       .catch(() => {
         if (controller.signal.aborted) return;
-        setDigitalPayment({ available: false, provider: null, loaded: true });
+        setDigitalPayment({ available: false, provider: null, vpa: null, loaded: true });
       });
     return () => controller.abort();
   }, []);

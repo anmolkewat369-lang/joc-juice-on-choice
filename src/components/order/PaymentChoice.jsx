@@ -1,5 +1,6 @@
-import { Banknote, Smartphone } from "lucide-react";
-import { PAYMENT_METHOD } from "../../../shared/ordering.js";
+import { useState } from "react";
+import { Banknote, Check, Copy, Info, Smartphone } from "lucide-react";
+import { PAYMENT_METHOD, PAYMENT_PROVIDER } from "../../../shared/ordering.js";
 import styles from "./PaymentChoice.module.css";
 
 /**
@@ -21,12 +22,13 @@ const OPTIONS = [
   },
   {
     value: PAYMENT_METHOD.UPI,
-    label: "Pay by UPI",
-    note: "Pay to our UPI ID, then enter the UTR so we can confirm it.",
+    label: "UPI / Online Payment",
+    note: "Pay using UPI before the order is confirmed.",
     Icon: Smartphone,
     providerNote: {
-      manual_upi: "Pay to our UPI ID, then enter the UTR so we can confirm it.",
-      razorpay: "UPI • Cards • Net Banking",
+      [PAYMENT_PROVIDER.MANUAL_UPI]:
+        "Pay using UPI before the order is confirmed. We will ask for the UTR so we can verify it.",
+      [PAYMENT_PROVIDER.RAZORPAY]: "UPI • Cards • Net Banking",
     },
   },
 ];
@@ -37,16 +39,39 @@ const OPTIONS = [
  * customer always makes an explicit choice.
  */
 export default function PaymentChoice({ value, onChange, error, digitalPayment }) {
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(null);
+
   const provider = digitalPayment?.provider;
   const available = Boolean(digitalPayment?.available);
+  /**
+   * `loaded` separates "the server has not answered yet" from "the server says
+   * online payment is off". Without it the "Cash on Delivery is the only option"
+   * warning would flash on every page load during the request, which reads as an
+   * outage to a customer who is merely on a slow connection.
+   */
+  const loaded = Boolean(digitalPayment?.loaded);
+  const vpa = digitalPayment?.vpa ?? null;
+  const manualUpi = available && provider === PAYMENT_PROVIDER.MANUAL_UPI && vpa;
 
   const options = OPTIONS.filter((option) =>
     option.alwaysAvailable ? true : available,
   ).map((option) =>
     option.providerNote
-      ? { ...option, note: option.providerNote[provider] ?? option.providerNote.manual_upi }
+      ? { ...option, note: option.providerNote[provider] ?? option.providerNote[PAYMENT_PROVIDER.MANUAL_UPI] }
       : option,
   );
+
+  const copyUpiId = async () => {
+    setCopyError(null);
+    try {
+      await navigator.clipboard.writeText(vpa);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyError("Could not copy automatically. Please select the UPI ID and copy it manually.");
+    }
+  };
 
   return (
     <fieldset className={styles.group} aria-describedby={error ? "payment-error" : undefined}>
@@ -82,7 +107,53 @@ export default function PaymentChoice({ value, onChange, error, digitalPayment }
         })}
       </div>
 
-      {!available ? (
+      {/* Revealed only once the customer has actually chosen UPI, so the
+          checkout does not open with a wall of payment instructions. */}
+      {manualUpi && value === PAYMENT_METHOD.UPI ? (
+        <div className={styles.instructions} role="group" aria-label="UPI payment details">
+          <p className={styles.instructionsLead}>
+            <Info size={15} aria-hidden="true" />
+            Pay securely using UPI
+          </p>
+
+          <div className={styles.upiRow}>
+            <code className={styles.upiId}>{vpa}</code>
+            <button type="button" className={styles.copyButton} onClick={copyUpiId}>
+              {copied ? (
+                <Check size={15} aria-hidden="true" />
+              ) : (
+                <Copy size={15} aria-hidden="true" />
+              )}
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+
+          <ol className={styles.instructionsSteps}>
+            <li>Place your order — it is confirmed straight away.</li>
+            <li>
+              Pay the exact total to the UPI ID above using any UPI app. A QR
+              code and a one-tap UPI link appear on the confirmation screen.
+            </li>
+            <li>
+              Enter the UTR / transaction reference your app shows. JOC verifies
+              it before the order is released.
+            </li>
+          </ol>
+
+          <p className={styles.note}>
+            Entering a UTR does not mark the order paid. It goes to JOC for
+            verification, and only an admin can confirm the payment.
+          </p>
+
+          {copyError ? (
+            <p className={styles.error} role="alert">
+              {copyError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {loaded && !available ? (
         <p className={styles.note} role="note">
           Online payment is unavailable right now, so Cash on Delivery is the only option.
         </p>

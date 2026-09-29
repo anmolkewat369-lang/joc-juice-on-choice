@@ -180,12 +180,19 @@ function createPostgresStore() {
       return rows[0] ?? null;
     },
 
+    /**
+     * Convert an order to cash on delivery, in place.
+     *
+     * Every trace of the attempted digital payment is cleared, so a converted
+     * order cannot carry a stale UTR or gateway id that an admin might later
+     * verify. The provider becomes "cod" — see PAYMENT_PROVIDER.
+     */
     async setPaymentMethod(orderId, paymentMethod) {
       const { rows } = await run(
         `update joc_orders
             set payment_method      = $2,
                 payment_status      = $3,
-                payment_provider    = null,
+                payment_provider    = $4,
                 payment_reference   = null,
                 payment_verified_at = null,
                 payment_verified_by = null,
@@ -194,7 +201,7 @@ function createPostgresStore() {
                 razorpay_signature  = null
           where order_id = $1
           returning *`,
-        [orderId, paymentMethod, PAYMENT_STATUS.PENDING],
+        [orderId, paymentMethod, PAYMENT_STATUS.PENDING, PAYMENT_PROVIDER.COD],
       );
       return rows[0] ?? null;
     },
@@ -480,7 +487,7 @@ function createMemoryStore() {
       if (!row) return null;
       row.payment_method = paymentMethod;
       row.payment_status = PAYMENT_STATUS.PENDING;
-      row.payment_provider = null;
+      row.payment_provider = PAYMENT_PROVIDER.COD;
       row.payment_reference = null;
       row.payment_verified_at = null;
       row.payment_verified_by = null;
@@ -723,8 +730,4 @@ export const ORDER_DEFAULTS = {
   orderStatus: ORDER_STATUS.RECEIVED,
   paymentStatus: PAYMENT_STATUS.PENDING,
 };
-
-/** A COD order has no provider; a digital order is stamped at creation. */
-export const providerForPaymentMethod = (paymentMethod) =>
-  paymentMethod === "COD" ? null : PAYMENT_PROVIDER.MANUAL_UPI;
 

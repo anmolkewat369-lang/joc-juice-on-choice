@@ -439,6 +439,290 @@ check("the WhatsApp link encodes the summary rather than appending it raw", asyn
   assert.ok(summary.includes("₹396"));
 });
 
+/* -------------------- payment methods advertised to checkout ---------------- */
+
+/**
+ * Checkout capability. These are the checks that would have caught the original
+ * defect: with JOC_UPI_ID unset the server offers Cash on Delivery only, the
+ * frontend renders the "online payment is unavailable" note, and both payment
+ * choices the owner had agreed on silently disappear from a working site.
+ */
+const UPI_ID = "9630194023@pthdfc";
+const withUpiEnv = (fn) => async () => {
+  process.env.JOC_UPI_ID = UPI_ID;
+  process.env.JOC_PAYMENT_PROVIDER = "manual_upi";
+  try {
+    return await fn();
+  } finally {
+    delete process.env.JOC_UPI_ID;
+    delete process.env.JOC_PAYMENT_PROVIDER;
+  }
+};
+
+check("checkout offers Cash on Delivery AND UPI when a UPI ID is configured", withUpiEnv(async () => {
+  const res = await callRoute("../api/payments/methods.js", { method: "GET" });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.provider, "manual_upi");
+
+  const methods = res.payload.methods.map((entry) => entry.method);
+  assert.deepEqual(methods, ["COD", "UPI"], "both choices must be advertised, in that order");
+  assert.ok(res.payload.methods.every((entry) => entry.available === true));
+}));
+
+check("the advertised UPI method carries the UPI ID for the checkout", withUpiEnv(async () => {
+  const res = await callRoute("../api/payments/methods.js", { method: "GET" });
+  const upi = res.payload.methods.find((entry) => entry.method === "UPI");
+  assert.equal(upi.vpa, UPI_ID, "checkout needs the UPI ID to show and copy it");
+  assert.equal(upi.provider, "manual_upi");
+}));
+
+check("a missing JOC_UPI_ID falls back to Cash on Delivery only", async () => {
+  delete process.env.JOC_UPI_ID;
+  process.env.JOC_PAYMENT_PROVIDER = "manual_upi";
+  try {
+    const res = await callRoute("../api/payments/methods.js", { method: "GET" });
+    const methods = res.payload.methods.map((entry) => entry.method);
+    assert.deepEqual(methods, ["COD"], "an unpayable option must not be offered");
+    assert.equal(res.payload.provider, "manual_upi", "the provider is still selected, just unusable");
+  } finally {
+    delete process.env.JOC_PAYMENT_PROVIDER;
+  }
+});
+
+check("a malformed or unconfigured UPI ID never offers UPI", async () => {
+  for (const bad of ["", "   ", "not-a-upi-id", "9630194023@", "@pthdfc", "9630194023@pthdfc extra"]) {
+    process.env.JOC_UPI_ID = bad;
+    process.env.JOC_PAYMENT_PROVIDER = "manual_upi";
+    const res = await callRoute("../api/payments/methods.js", { method: "GET" });
+    assert.deepEqual(
+      res.payload.methods.map((entry) => entry.method),
+      ["COD"],
+      `JOC_UPI_ID=${JSON.stringify(bad)} must not enable UPI`,
+    );
+  }
+  delete process.env.JOC_UPI_ID;
+  delete process.env.JOC_PAYMENT_PROVIDER;
+});
+
+check("a quoted or padded JOC_UPI_ID still works", withUpiEnv(async () => {
+  // Operators paste these values out of a dashboard; stray whitespace and quotes
+  // must not read as "online payment unavailable" with nothing visibly wrong.
+  const { configuredUpiId, availableMethods } = await import("../api/_lib/payments.js");
+  for (const messy of [`"${UPI_ID}"`, `'${UPI_ID}'`, `  ${UPI_ID}  `, `\t${UPI_ID}\n`]) {
+    process.env.JOC_UPI_ID = messy;
+    assert.equal(configuredUpiId(), UPI_ID, `failed to normalise ${JSON.stringify(messy)}`);
+    assert.deepEqual(availableMethods().map((entry) => entry.method), ["COD", "UPI"]);
+  }
+}));
+
+check("Cash on Delivery is offered even when the provider is razorpay but unconfigured", async () => {
+  process.env.JOC_PAYMENT_PROVIDER = "razorpay";
+  delete process.env.JOC_UPI_ID;
+  try {
+    const res = await callRoute("../api/payments/methods.js", { method: "GET" });
+    assert.deepEqual(res.payload.methods.map((entry) => entry.method), ["COD"]);
+    assert.equal(res.payload.provider, "razorpay");
+  } finally {
+    delete process.env.JOC_PAYMENT_PROVIDER;
+  }
+});
+
+/* ---------------------------- end-to-end order paths ----------------------- */
+
+const checkoutBody = (paymentMethod, over = {}) => ({
+  name: "Asha Rao",
+  phone: "9876543210",
+  address: "12 MG Road, Indiranagar",
+  landmark: "Opposite Toit",
+  instructions: "Less ice",
+  // Priced from the real menu, not a fixture: 159 x 2 = 318, delivery 0.
+  items: [{ id: "paneer-momos", qty: 2 }],
+  paymentMethod,
+  ...over,
+});
+
+const placeOrder = (body, idempotencyKey) =>
+  callRoute("../api/orders/index.js", {
+    method: "POST",
+    headers: { "idempotency-key": idempotencyKey },
+    body,
+  });
+
+check("a Cash on Delivery order places normally", withUpiEnv(async () => {
+  const res = await placeOrder(checkoutBody("COD"), "e2e-cod-0001");
+  assert.equal(res.statusCode, 201, `expected 201, got ${res.statusCode} ${JSON.stringify(res.payload)}`);
+  assert.equal(res.payload.order.paymentMethod, "COD");
+  assert.equal(res.payload.order.paymentProvider, "cod", "a cash order is recorded as provider 'cod'");
+  assert.equal(res.payload.order.paymentStatus, "PENDING");
+  assert.equal(res.payload.order.orderStatus, "RECEIVED");
+  assert.equal(res.payload.payment, null, "a cash order has no digital payment view");
+  assert.ok(res.payload.accessToken, "the owner token is returned exactly once");
+}));
+
+check("a UPI order is created pending, with a server-priced payment view", withUpiEnv(async () => {
+  const res = await placeOrder(checkoutBody("UPI"), "e2e-upi-0001");
+  assert.equal(res.statusCode, 201, `expected 201, got ${res.statusCode} ${JSON.stringify(res.payload)}`);
+  assert.equal(res.payload.order.paymentMethod, "UPI");
+  assert.equal(res.payload.order.paymentProvider, "manual_upi");
+  assert.equal(res.payload.order.paymentStatus, "PENDING");
+  assert.equal(res.payload.order.orderStatus, "RECEIVED");
+
+  const payment = res.payload.payment;
+  assert.equal(payment.mode, "manual");
+  assert.equal(payment.vpa, UPI_ID, "the UPI ID must be shown to the customer");
+  assert.equal(payment.amount, 318, "the amount comes from the server's price, not the client");
+  assert.ok(payment.qrSvg.startsWith("<svg"), "expected an inline QR");
+  assert.ok(payment.uri.startsWith("upi://pay?"), "expected a UPI deep link");
+  assert.ok(payment.uri.includes("pa=9630194023%40pthdfc"), "the link must carry the UPI ID");
+  assert.ok(payment.uri.includes("am=318.00"), "the link must carry the server-priced amount");
+}));
+
+check("the client cannot set payment_status to PAID, or choose its own provider", withUpiEnv(async () => {
+  const res = await placeOrder(
+    checkoutBody("COD", {
+      paymentStatus: "PAID",
+      paymentProvider: "razorpay",
+      total: 1,
+      subtotal: 1,
+      deliveryCharge: 0,
+    }),
+    "e2e-tamper-0001",
+  );
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.payload.order.paymentStatus, "PENDING", "a client-supplied PAID must be ignored");
+  assert.equal(res.payload.order.paymentProvider, "cod", "the provider is stamped server-side");
+  assert.equal(res.payload.order.total, 318, "the server prices the order, not the browser");
+}));
+
+check("a UPI order is refused outright when no UPI ID is configured", async () => {
+  delete process.env.JOC_UPI_ID;
+  process.env.JOC_PAYMENT_PROVIDER = "manual_upi";
+  try {
+    const res = await placeOrder(checkoutBody("UPI"), "e2e-noupi-0001");
+    assert.equal(res.statusCode, 503, "an unpayable order must be refused, not silently created");
+    assert.equal(res.payload.error.code, "payments_unavailable");
+  } finally {
+    delete process.env.JOC_PAYMENT_PROVIDER;
+  }
+});
+
+check("the full UPI path stops at PAYMENT_VERIFICATION_REQUIRED and never reaches PAID", withUpiEnv(async () => {
+  const created = await placeOrder(checkoutBody("UPI"), "e2e-utr-0001");
+  assert.equal(created.statusCode, 201);
+  const { orderId } = created.payload.order;
+  const token = created.payload.accessToken;
+
+  const submitted = await callRoute("../api/orders/utr.js", {
+    headers: { "x-order-token": token },
+    body: { orderId, paymentReference: "421234567890" },
+  });
+  assert.equal(submitted.statusCode, 200);
+  assert.equal(
+    submitted.payload.order.paymentStatus,
+    "PAYMENT_VERIFICATION_REQUIRED",
+    "a UTR must never be treated as proof of payment",
+  );
+  assert.notEqual(submitted.payload.order.paymentStatus, "PAID");
+  assert.equal(submitted.payload.order.paymentReference, "421234567890");
+
+  // Re-submitting the same reference is a harmless no-op, not a second claim.
+  const again = await callRoute("../api/orders/utr.js", {
+    headers: { "x-order-token": token },
+    body: { orderId, paymentReference: "421234567890" },
+  });
+  assert.equal(again.statusCode, 200);
+  assert.equal(again.payload.alreadySubmitted, true);
+  assert.equal(again.payload.order.paymentStatus, "PAYMENT_VERIFICATION_REQUIRED");
+
+  // And the admin sees exactly the reference the customer submitted.
+  const detail = await getOrderDetail(await getStore(), orderId);
+  assert.equal(detail.order.paymentReference, "421234567890");
+  assert.equal(detail.order.paymentStatus, "PAYMENT_VERIFICATION_REQUIRED");
+  assert.equal(verificationPreview(detail.order).requiresAttention, true);
+}));
+
+check("only an authenticated admin can move a UPI order to PAID", withUpiEnv(async () => {
+  process.env.JOC_ADMIN_SESSION_SECRET = "a-test-secret-that-is-definitely-long-enough-x";
+  const created = await placeOrder(checkoutBody("UPI"), "e2e-admin-0001");
+  const { orderId } = created.payload.order;
+  await callRoute("../api/orders/utr.js", {
+    headers: { "x-order-token": created.payload.accessToken },
+    body: { orderId, paymentReference: "421234567894" },
+  });
+
+  // No session, forged session, and a session signed with another secret: all refused.
+  const anonymous = await callRoute("../api/admin/orders/[orderId].js", {
+    method: "PATCH",
+    query: { orderId },
+    body: { action: "verifyPayment" },
+  });
+  assert.equal(anonymous.statusCode, 401, "verifyPayment must require a session");
+
+  const forged = await callRoute("../api/admin/orders/[orderId].js", {
+    method: "PATCH",
+    query: { orderId },
+    headers: { cookie: "joc_admin_session=eyJzdWIiOiJoYWNrZXIifQ.notarealsignature" },
+    body: { action: "verifyPayment" },
+  });
+  assert.equal(forged.statusCode, 401, "a forged cookie must not verify a payment");
+
+  // Unchanged by all of the above.
+  let current = await getOrderDetail(await getStore(), orderId);
+  assert.equal(current.order.paymentStatus, "PAYMENT_VERIFICATION_REQUIRED");
+
+  // A real session is accepted and is the only thing that can produce PAID.
+  const { createSessionToken } = await import("../api/_lib/adminAuth.js");
+  const { token: session } = createSessionToken(admin);
+  const verified = await callRoute("../api/admin/orders/[orderId].js", {
+    method: "PATCH",
+    query: { orderId },
+    headers: { cookie: `joc_admin_session=${session}` },
+    body: { action: "verifyPayment", note: "seen in bank statement" },
+  });
+  assert.equal(verified.statusCode, 200, `expected 200, got ${verified.statusCode}`);
+  assert.equal(verified.payload.order.paymentStatus, "PAID");
+  assert.equal(verified.payload.order.paymentVerifiedBy, admin.id);
+
+  current = await getOrderDetail(await getStore(), orderId);
+  assert.equal(current.order.paymentStatus, "PAID");
+  const event = current.events.find((entry) => entry.eventType === "PAYMENT_VERIFIED");
+  assert.ok(event, "the verification must be auditable");
+  assert.equal(event.oldValue, "PAYMENT_VERIFICATION_REQUIRED");
+  assert.equal(event.newValue, "PAID");
+}));
+
+check("the UPI intent carries a readable note, not \"JOC undefined\"", withUpiEnv(async () => {
+  const { buildUpiIntent } = await import("../api/_lib/upi.js");
+  const intent = buildUpiIntent({ upiId: UPI_ID, amount: 318, orderId: "JOC-20260929-0007" });
+  assert.equal(intent.note, "JOC JOC-20260929-0007", "the note is what the customer sees and what lands in the bank statement");
+  assert.ok(!/undefined/.test(intent.uri), "the deep link must never contain the string 'undefined'");
+  assert.ok(intent.uri.includes("tn=JOC%20JOC-20260929-0007"));
+  assert.ok(intent.uri.includes("tr=JOC-20260929-0007"), "the order id must be the payment reference");
+  assert.ok(intent.qrSvg.startsWith("<svg"));
+}));
+
+check("a UPI order can be converted to Cash on Delivery by its owner", withUpiEnv(async () => {
+  const created = await placeOrder(checkoutBody("UPI"), "e2e-switch-0001");
+  const res = await callRoute("../api/payments/cancel.js", {
+    headers: { "x-order-token": created.payload.accessToken },
+    body: { orderId: created.payload.order.orderId, paymentMethod: "COD" },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.order.paymentMethod, "COD");
+  assert.equal(res.payload.order.paymentProvider, "cod", "the converted order records the cod provider");
+  assert.equal(res.payload.order.paymentStatus, "PENDING");
+}));
+
+check("an order token is never accepted from a query string", withUpiEnv(async () => {
+  const created = await placeOrder(checkoutBody("UPI"), "e2e-tokq-0001");
+  const token = created.payload.accessToken;
+  const res = await callRoute("../api/orders/utr.js", {
+    query: { orderId: created.payload.order.orderId, token },
+    body: { orderId: created.payload.order.orderId, paymentReference: "421234567895" },
+  });
+  assert.equal(res.statusCode, 404, "the token must travel in the header, never the URL");
+}));
+
 /* ----------------------------------- run ---------------------------------- */
 
 let failed = 0;

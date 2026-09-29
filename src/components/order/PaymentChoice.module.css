@@ -113,3 +113,82 @@
   font-weight: 600;
   color: var(--berry-600);
 }
+
+/* Revealed under the UPI option once the customer has selected it. Uses the
+   same tint and rule as the selected option so it reads as part of that card
+   rather than as a new block of the page. */
+.instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1rem 1.05rem;
+  border-radius: var(--radius-md);
+  background: var(--paper-tint);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.instructionsLead {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.instructionsSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: var(--fs-xs);
+  color: var(--ink-600);
+}
+
+.upiRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.upiId {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--green-800);
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  /* A UPI ID is not a secret, but it should not be broken mid-word on wrap. */
+  word-break: break-all;
+}
+
+.copyButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.6rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--ink-800);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: box-shadow var(--dur-fast) var(--ease);
+}
+
+.copyButton:hover {
+  box-shadow: inset 0 0 0 1px var(--green-600);
+}
+
+.copyButton:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}

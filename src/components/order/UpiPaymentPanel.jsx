@@ -35,7 +35,18 @@ export default function UpiPaymentPanel({ order, payment, onSubmitted }) {
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(null);
 
-  const awaiting = isAwaitingUtr(order?.paymentStatus);
+  /**
+   * Has the customer's UTR already been accepted by the server?
+   *
+   * This was previously `isAwaitingUtr(order?.paymentStatus)`, which asked two
+   * wrong questions at once: isAwaitingUtr takes the whole order, not a status
+   * string, so it was permanently false and the confirmation below could never
+   * render. And even correctly called it answers "does the customer still owe
+   * us money", which is the opposite of the branch it guards. The honest test is
+   * the order's own state — PAYMENT_VERIFICATION_REQUIRED — which is exactly
+   * what the server sets the moment it accepts a reference.
+   */
+  const awaiting = !isAwaitingUtr(order) && Boolean(order?.paymentReference);
 
   if (!payment) {
     return (

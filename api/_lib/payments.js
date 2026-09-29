@@ -6,6 +6,8 @@
  * provider is selected by JOC_PAYMENT_PROVIDER and nothing else in the codebase
  * branches on a provider name except the provider modules themselves.
  *
+ *   cod          customer pays the delivery partner in cash. Always available,
+ *                          needs no configuration, and is never switched off.
  *   manual_upi  (default)  customer pays a UPI ID themselves, submits a UTR,
  *                          an admin verifies it. No gateway, no secrets.
  *   razorpay                customer pays through Razorpay Checkout. Available
@@ -18,7 +20,7 @@
 
 import { PAYMENT_METHOD, PAYMENT_PROVIDER, CURRENCY } from "../../shared/ordering.js";
 import { hasRazorpayCredentials, isTestMode } from "./razorpay.js";
-import { buildUpiIntent, isUpiConfigured } from "./upi.js";
+import { buildUpiIntent, isUpiConfigured, normaliseUpiId } from "./upi.js";
 import { ApiError } from "./http.js";
 
 /** The provider JOC has chosen. Anything unrecognised falls back to manual UPI. */
@@ -28,6 +30,18 @@ export function activeProvider() {
   return PAYMENT_PROVIDER.MANUAL_UPI;
 }
 
+/**
+ * The configured UPI ID, normalised, or null when it is absent or malformed.
+ *
+ * Read through one function so the value the checkout advertises, the value
+ * embedded in the payment QR and the value a payment is credited to can never
+ * disagree with each other.
+ */
+export const configuredUpiId = () => {
+  const upiId = normaliseUpiId(process.env.JOC_UPI_ID);
+  return isUpiConfigured(upiId) ? upiId : null;
+};
+
 /** Why a provider cannot be used right now, or null if it can. */
 function unavailableReason(provider) {
   if (provider === PAYMENT_PROVIDER.RAZORPAY) {
@@ -35,7 +49,7 @@ function unavailableReason(provider) {
     return null;
   }
   if (provider === PAYMENT_PROVIDER.MANUAL_UPI) {
-    if (!isUpiConfigured(process.env.JOC_UPI_ID)) return "upi_not_configured";
+    if (!configuredUpiId()) return "upi_not_configured";
     return null;
   }
   return "unknown_provider";
@@ -78,10 +92,18 @@ export function availableMethods() {
         method: PAYMENT_METHOD.UPI,
         provider: PAYMENT_PROVIDER.MANUAL_UPI,
         label: "UPI",
-        note: "Pay by UPI, then enter your UTR so we can confirm it.",
+        note: "Pay to our UPI ID, then enter the UTR so we can confirm it.",
         available: true,
+        /**
+         * The UPI ID, published here on purpose: it is a payment address, not a
+         * credential, and the customer has to read it off this screen. Only ever
+         * non-null when isProviderAvailable() has already confirmed a valid ID is
+         * configured, so it cannot leak an unconfigured or malformed value.
+         */
+        vpa: configuredUpiId(),
       });
     }
+
   }
 
   return methods;
@@ -91,9 +113,19 @@ export function availableMethods() {
 export const isDigitalPaymentAvailable = () =>
   availableMethods().some((entry) => entry.method === PAYMENT_METHOD.UPI);
 
-/** The provider that should be stamped on a newly created UPI order. */
+/**
+ * The provider stamped on a newly created order.
+ *
+ * Cash on delivery is recorded as the "cod" provider so every order carries a
+ * provider rather than a null: it makes the value the admin dashboard shows
+ * unconditional, and it is a label, not a settlement path — nothing about cash
+ * on delivery is configured or switched on.
+ *
+ * A digital payment is stamped with the *active* provider and only when that
+ * provider is genuinely usable; otherwise null, which the order layer refuses.
+ */
 export function providerForNewOrder(paymentMethod) {
-  if (paymentMethod !== PAYMENT_METHOD.UPI) return null;
+  if (paymentMethod !== PAYMENT_METHOD.UPI) return PAYMENT_PROVIDER.COD;
   const provider = activeProvider();
   if (!isProviderAvailable(provider)) return null;
   return provider === PAYMENT_PROVIDER.RAZORPAY
@@ -114,9 +146,10 @@ export function paymentViewFor(order) {
 
   const provider = order.payment_provider ?? activeProvider();
   if (provider === PAYMENT_PROVIDER.MANUAL_UPI) {
-    if (!isUpiConfigured(process.env.JOC_UPI_ID)) return null;
+    const upiId = configuredUpiId();
+    if (!upiId) return null;
     const intent = buildUpiIntent({
-      upiId: process.env.JOC_UPI_ID,
+      upiId,
       amount: order.total,
       orderId: order.order_id,
       currency: order.currency ?? CURRENCY,

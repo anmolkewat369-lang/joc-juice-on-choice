@@ -7,6 +7,7 @@ import {
   DELIVERY_NOTE,
   LIMITS,
   PAYMENT_METHOD,
+  PAYMENT_PROVIDER,
   validateCheckout,
 } from "../../../shared/ordering.js";
 import { cartHref, homeHref } from "../../lib/route";
@@ -102,9 +103,26 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
     await flow.placeOrder({ items, details: result.value });
   };
 
+  /**
+   * Which rail settles a UPI order, per the server. Both branches below used to
+   * test `PAYMENT_METHOD.ONLINE`, a key that no longer exists since the method
+   * was renamed to UPI — so `undefined` was compared against a real value, both
+   * comparisons were permanently false, and the copy silently described cash on
+   * delivery even when the customer had chosen UPI. Branching on the provider
+   * keeps the copy true for manual UPI as well as for a gateway.
+   */
+  const upiProvider =
+    form.paymentMethod === PAYMENT_METHOD.UPI
+      ? (flow.digitalPayment?.provider ?? null)
+      : null;
+  const isGateway = upiProvider === PAYMENT_PROVIDER.RAZORPAY;
+  const isManualUpi = upiProvider === PAYMENT_PROVIDER.MANUAL_UPI;
+
   const submitLabel = (() => {
     if (busy) return BUTTON_COPY[flow.flow];
-    return form.paymentMethod === PAYMENT_METHOD.ONLINE ? "Pay Now" : "Place Order";
+    // Only a gateway takes the money inside this button. Manual UPI is paid
+    // after the order exists, so it is still "Place Order".
+    return isGateway ? "Pay Now" : "Place Order";
   })();
 
   return (
@@ -247,11 +265,13 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
 
               <p className={styles.trust}>
                 <Lock size={14} aria-hidden="true" />
-                {form.paymentMethod === PAYMENT_METHOD.ONLINE
+                {isGateway
                   ? flow.testMode
                     ? "TEST MODE: this is a development payment on the Razorpay sandbox — no real money moves."
                     : "Payment details go straight to the payment provider. We never see or store card details."
-                  : "No advance payment. Pay the delivery partner when your order arrives."}
+                  : isManualUpi
+                    ? "Pay by UPI after placing the order, then send us the UTR. JOC verifies it before the order is released."
+                    : "No advance payment. Pay the delivery partner when your order arrives."}
               </p>
             </div>
           </form>

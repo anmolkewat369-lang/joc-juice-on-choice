@@ -16,7 +16,11 @@ confirmation) and server-side order storage.
 - `lucide-react` for icons
 - Serverless API functions under `api/` for Vercel
 - `pg` + **Supabase Postgres** for durable order storage (`DATABASE_URL`)
-- **Razorpay Standard Checkout** for online payments (server-side verification, no SDK)
+- A **payment provider abstraction** (`api/_lib/payments.js`) with two rails:
+  - **Manual UPI** (current): the customer pays your UPI ID, submits the UTR, and
+    an admin verifies it. No gateway, no secrets, no SDK.
+  - **Razorpay Standard Checkout** (future): server-side signature verification,
+    no SDK. Select it with `JOC_PAYMENT_PROVIDER=razorpay`.
 
 ## Run it
 
@@ -47,9 +51,20 @@ tagged `storage.durable: false`. No order is ever fake-stored.
 - **Order lookup**: order ids (e.g. `JOC-20260928-0001`) are public, so lookup
   requires a per-order secret. It is returned once at creation, kept in
   `sessionStorage`, and sent as an `X-Order-Token` header (never in the URL).
-- **Payments**: only `/api/payments/verify` can set `paymentStatus` to `PAID`,
-  and only after an HMAC signature check, a gateway-order match, and confirmation
-  from Razorpay that the amount matches and the payment is actually paid.
+- **Payments**: the provider is chosen by `JOC_PAYMENT_PROVIDER` and the checkout
+  offers a digital option only when that provider is genuinely usable — an option
+  that cannot take money is never shown. Cash on Delivery is always offered.
+- **A UTR is a claim, not proof**: submitting a transaction reference can only
+  ever move an order to `PAYMENT_VERIFICATION_REQUIRED`. There is no request
+  field, query parameter or code path a customer can reach that produces `PAID`.
+- **Only two things can mark a payment `PAID`**: a verified gateway signature
+  (`/api/payments/verify`, matching order id, gateway-confirmed paid, amount
+  match) or an authenticated admin at `/admin/orders`. Both write
+  `payment_verified_at` / `payment_verified_by` and an audit row.
+- **The browser is never trusted with money**: totals are priced server-side from
+  the shared menu, `payment_provider` and `payment_status` are stamped
+  server-side, and the UPI ID, amount, deep link and QR in the confirmation view
+  are all built by the server.
 - **Failure is honest**: a failed/cancelled payment lands on an explicit failure
   screen, never a fake success, with Retry and Change-to-COD options that operate
   on the same stored order.
@@ -58,9 +73,11 @@ tagged `storage.durable: false`. No order is ever fake-stored.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/api/orders` | Create a COD or online order |
+| POST | `/api/orders` | Create a COD or UPI order |
 | GET | `/api/orders/:orderId` | Look up an order (token required) |
-| POST | `/api/payments/create` | Start a Razorpay session for an order |
+| POST | `/api/orders/utr` | Submit a UTR (token required) — can only reach `PAYMENT_VERIFICATION_REQUIRED` |
+| GET | `/api/payments/methods` | What this deployment can actually offer |
+| POST | `/api/payments/create` | Start a gateway session for an order |
 | POST | `/api/payments/verify` | Server-verified payment success |
 | POST | `/api/payments/cancel` | Mark failed/cancelled, or convert to COD |
 
@@ -72,22 +89,39 @@ Copy `.env.example` → `.env.local` for local development. All values are
 | Variable | Required | Notes |
 | --- | --- | --- |
 | `DATABASE_URL` | For durable orders | Supabase Postgres (use the transaction pooler for Vercel) |
-| `JOC_AUTO_MIGRATE` | Optional | `true` lets the API run `db/schema.sql` on first request; set `false` if you provision it yourself |
+| `JOC_AUTO_MIGRATE` | Optional | `true` lets the API run the schema + migrations on first request; set `false` if you provision it yourself |
 | `JOC_ALLOW_MEMORY_STORE` | Optional | Only needed to force in-memory mode on a production build |
-| `RAZORPAY_KEY_ID` | For Pay Now | `rzp_test_...` or `rzp_live_...` |
-| `RAZORPAY_KEY_SECRET` | For Pay Now | The secret — never commit it |
+| `JOC_PAYMENT_PROVIDER` | Optional | `manual_upi` (default) or `razorpay`. Selects which rail settles a digital payment |
+| `JOC_UPI_ID` | **For the UPI option at checkout** | `handle@bank`, e.g. `9630194023@pthdfc`. **Not a secret** — it is shown to customers and embedded in the payment QR. Without it, checkout offers Cash on Delivery only |
+| `JOC_ADMIN_SESSION_SECRET` | For `/admin` | ≥32 chars, random. Signs the admin session cookie. Never commit |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | For `/admin` | Supabase Auth only. The anon key cannot read any table (RLS is enabled with no policies) |
+| `JOC_ADMIN_EMAILS` | Optional | Allow-list. Empty means any user who can sign in |
+| `JOC_WHATSAPP_NUMBER` | Optional | `919630194023`-style digits, no `+`. Builds the admin's WhatsApp deep link |
+| `JOC_NOTIFY_EMAIL` / `JOC_NOTIFY_FROM` / `RESEND_API_KEY` | Optional | Email notifications. All three needed; the key is a secret |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Only if provider is `razorpay` | `rzp_test_...` / `rzp_live_...`. The secret must never be committed |
 | `RAZORPAY_TEST_MODE` | Optional | Defaults `true`; live money only when explicitly `false` AND live keys are set |
+
+> **Checkout shows Cash on Delivery only?** Check `JOC_UPI_ID` first. It is the
+> single variable that decides whether the UPI option appears, and the checkout
+> says "Online payment is unavailable right now" whenever it is missing or
+> malformed. `GET /api/payments/methods` reports exactly what the server offers,
+> which is the fastest way to confirm a deployment's configuration.
 
 ### Setup steps
 
 1. **Database (Supabase)**: create a project, copy its Postgres connection string
-   into `DATABASE_URL`, and either run `db/schema.sql` once in the SQL editor or
-   keep `JOC_AUTO_MIGRATE=true`.
-2. **Payments (Razorpay)**: enable Razorpay in your merchant account, copy the
-   Test Mode key pair into `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`, and keep the
-   default `RAZORPAY_TEST_MODE=true`. Test payments are clearly labelled on the
-   confirmation screen.
-3. **Vercel**: connect the repo, add the environment variables for Preview and
+   into `DATABASE_URL`, then either keep `JOC_AUTO_MIGRATE=true` (the API applies
+   the schema and all migrations itself on first request) or set
+   `JOC_AUTO_MIGRATE=false` and run `db/schema.sql` on a **new** database — or the
+   files in `db/migrations/` in order on an **existing** one, in the SQL editor.
+2. **Payments**: set `JOC_PAYMENT_PROVIDER=manual_upi` and `JOC_UPI_ID` to your
+   `handle@bank`. Customers pay that ID, submit the UTR, and an admin verifies it
+   at `/admin/orders`. Razorpay stays behind the same provider abstraction: switch
+   `JOC_PAYMENT_PROVIDER` to `razorpay` and add the key pair to use it instead.
+3. **Admin**: set `JOC_ADMIN_SESSION_SECRET`, `SUPABASE_URL` and
+   `SUPABASE_ANON_KEY`, then sign in at `/admin`. The dashboard is where a UPI
+   payment moves from `PAYMENT_VERIFICATION_REQUIRED` to `PAID`.
+4. **Vercel**: connect the repo, add the environment variables for Preview and
    Production, and set the build command/root from `vercel.json`. The API
    functions deploy as serverless routes automatically.
 
