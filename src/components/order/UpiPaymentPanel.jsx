@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check, Copy, Loader2, QrCode, Smartphone } from "lucide-react";
 import { formatPrice } from "../../data/menu";
-import { UTR_MESSAGES, isAwaitingUtr } from "../../../shared/ordering.js";
+import { UTR_MESSAGES } from "../../../shared/ordering.js";
 import { submitUtr } from "../../lib/api";
 import styles from "./UpiPaymentPanel.module.css";
 
@@ -36,18 +36,15 @@ export default function UpiPaymentPanel({ order, payment, onSubmitted }) {
   const [copied, setCopied] = useState(null);
 
   /**
-   * Has the customer's UTR already been accepted by the server?
-   *
-   * This was previously `isAwaitingUtr(order?.paymentStatus)`, which asked two
-   * wrong questions at once: isAwaitingUtr takes the whole order, not a status
-   * string, so it was permanently false and the confirmation below could never
-   * render. And even correctly called it answers "does the customer still owe
-   * us money", which is the opposite of the branch it guards. The honest test is
-   * the order's own state — PAYMENT_VERIFICATION_REQUIRED — which is exactly
-   * what the server sets the moment it accepts a reference.
+   * This component is the "you still owe us money" affordance and nothing more.
+   * Its parent mounts it only while the order is UPI + PENDING; the instant the
+   * server accepts a reference the order becomes PAYMENT_VERIFICATION_REQUIRED,
+   * the parent unmounts this panel, and the parent renders the
+   * "verifying your payment" copy instead. So there is deliberately no
+   * "UTR received" branch in here — the parent owns every post-submission state,
+   * and duplicating it would leave two components disagreeing about the order's
+   * status.
    */
-  const awaiting = !isAwaitingUtr(order) && Boolean(order?.paymentReference);
-
   if (!payment) {
     return (
       <div className={styles.panel} role="status">
@@ -91,122 +88,107 @@ export default function UpiPaymentPanel({ order, payment, onSubmitted }) {
         Pay {formatPrice(order.total)} by UPI
       </h2>
 
-      {awaiting ? (
-        <>
-          <p className={styles.verified} role="status">
-            <Check size={18} aria-hidden="true" />
-            <span>
-              UTR <strong>{reference}</strong> received. JOC will check it against our records and
-              confirm your payment shortly. You do not need to do anything else.
-            </span>
-          </p>
-          <p className={styles.note}>
-            Your order is already placed and is not affected by the time this takes.
-          </p>
-        </>
-      ) : (
-        <ol className={styles.steps}>
-          <li>
-            <span className={styles.stepNumber}>1</span>
-            <div>
-              <p className={styles.stepTitle}>Pay {formatPrice(order.total)} to our UPI ID</p>
-              <div className={styles.upiRow}>
-                <code className={styles.upiId}>{payment.vpa}</code>
-                <button
-                  type="button"
-                  className={styles.copyButton}
-                  onClick={() => copy(payment.vpa, "upi")}
-                >
-                  {copied === "upi" ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
-                  {copied === "upi" ? "Copied" : "Copy"}
-                </button>
-              </div>
-              <p className={styles.payeeName}>
-                {payment.payeeName} · amount {formatPrice(payment.amount)}
-                {payment.reference ? ` · ref ${payment.reference}` : ""}
-              </p>
+      <ol className={styles.steps}>
+        <li>
+          <span className={styles.stepNumber}>1</span>
+          <div>
+            <p className={styles.stepTitle}>Pay {formatPrice(order.total)} to our UPI ID</p>
+            <div className={styles.upiRow}>
+              <code className={styles.upiId}>{payment.vpa}</code>
+              <button
+                type="button"
+                className={styles.copyButton}
+                onClick={() => copy(payment.vpa, "upi")}
+              >
+                {copied === "upi" ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+                {copied === "upi" ? "Copied" : "Copy"}
+              </button>
             </div>
-          </li>
+            <p className={styles.payeeName}>
+              {payment.payeeName} · amount {formatPrice(payment.amount)}
+              {payment.reference ? ` · ref ${payment.reference}` : ""}
+            </p>
+          </div>
+        </li>
 
-          <li>
-            <span className={styles.stepNumber}>2</span>
-            <div>
-              <p className={styles.stepTitle}>
-                Pay using your UPI app, then enter the UTR / transaction ID
-              </p>
-              <div className={styles.qrRow}>
-                {payment.qrSvg ? (
-                  <div
-                    className={styles.qr}
-                    /* The QR is generated by the server from the server-priced
-                       amount, as inline SVG. It is data, not markup from a user. */
-                    dangerouslySetInnerHTML={{ __html: payment.qrSvg }}
-                  />
-                ) : null}
-                <a
-                  className="btn btn--primary btn--lg"
-                  href={payment.uri}
-                  /* Opening a UPI intent must be a deliberate tap, and the URL is
-                     server-generated from the stored order. */
-                  rel="noreferrer"
-                >
-                  <QrCode size={18} aria-hidden="true" />
-                  Open UPI app
-                </a>
-              </div>
-              <p className={styles.note}>
-                Scan the QR with any UPI app, or tap above if your phone offers it.
-              </p>
-            </div>
-          </li>
-
-          <li>
-            <span className={styles.stepNumber}>3</span>
-            <div>
-              <p className={styles.stepTitle}>Enter the UTR so we can confirm your payment</p>
-              <form onSubmit={submit} className={styles.form}>
-                <label className="visually-hidden" htmlFor="utr-input">
-                  UTR / transaction reference
-                </label>
-                <input
-                  id="utr-input"
-                  className={styles.input}
-                  type="text"
-                  /* No inputMode="numeric": most UTRs are 12 digits, but the
-                     server accepts alphanumeric references, and a numeric keypad
-                     would stop the customer from typing one of those at all. */
-                  autoComplete="off"
-                  spellCheck="false"
-                  maxLength={64}
-                  value={reference}
-                  onChange={(event) => {
-                    setReference(event.target.value);
-                    if (error) setError(null);
-                  }}
-                  placeholder="e.g. 421234567890"
-                  aria-describedby={error ? "utr-error" : "utr-hint"}
-                  aria-invalid={error ? "true" : undefined}
+        <li>
+          <span className={styles.stepNumber}>2</span>
+          <div>
+            <p className={styles.stepTitle}>
+              Pay using your UPI app, then enter the UTR / transaction ID
+            </p>
+            <div className={styles.qrRow}>
+              {payment.qrSvg ? (
+                <div
+                  className={styles.qr}
+                  /* The QR is generated by the server from the server-priced
+                     amount, as inline SVG. It is data, not markup from a user. */
+                  dangerouslySetInnerHTML={{ __html: payment.qrSvg }}
                 />
-                <button type="submit" className="btn btn--primary" disabled={busy || !reference.trim()}>
-                  {busy ? (
-                    <Loader2 className={styles.spin} size={16} aria-hidden="true" />
-                  ) : null}
-                  Submit UTR
-                </button>
-              </form>
-              <p id="utr-hint" className={styles.note}>
-                Your UPI app shows this after a successful payment. Submitting it does not mark the
-                order paid — we verify it first.
-              </p>
-              {error ? (
-                <p id="utr-error" className={styles.error} role="alert">
-                  {error}
-                </p>
               ) : null}
+              <a
+                className="btn btn--primary btn--lg"
+                href={payment.uri}
+                /* Opening a UPI intent must be a deliberate tap, and the URL is
+                   server-generated from the stored order. */
+                rel="noreferrer"
+              >
+                <QrCode size={18} aria-hidden="true" />
+                Open UPI app
+              </a>
             </div>
-          </li>
-        </ol>
-      )}
+            <p className={styles.note}>
+              Scan the QR with any UPI app, or tap above if your phone offers it.
+            </p>
+          </div>
+        </li>
+
+        <li>
+          <span className={styles.stepNumber}>3</span>
+          <div>
+            <p className={styles.stepTitle}>Enter the UTR so we can confirm your payment</p>
+            <form onSubmit={submit} className={styles.form}>
+              <label className="visually-hidden" htmlFor="utr-input">
+                UTR / transaction reference
+              </label>
+              <input
+                id="utr-input"
+                className={styles.input}
+                type="text"
+                /* No inputMode="numeric": most UTRs are 12 digits, but the
+                   server accepts alphanumeric references, and a numeric keypad
+                   would stop the customer from typing one of those at all. */
+                autoComplete="off"
+                spellCheck="false"
+                maxLength={64}
+                value={reference}
+                onChange={(event) => {
+                  setReference(event.target.value);
+                  if (error) setError(null);
+                }}
+                placeholder="e.g. 421234567890"
+                aria-describedby={error ? "utr-error" : "utr-hint"}
+                aria-invalid={error ? "true" : undefined}
+              />
+              <button type="submit" className="btn btn--primary" disabled={busy || !reference.trim()}>
+                {busy ? (
+                  <Loader2 className={styles.spin} size={16} aria-hidden="true" />
+                ) : null}
+                Submit UTR
+              </button>
+            </form>
+            <p id="utr-hint" className={styles.note}>
+              Your UPI app shows this after a successful payment. Submitting it does not mark the
+              order paid — we verify it first.
+            </p>
+            {error ? (
+              <p id="utr-error" className={styles.error} role="alert">
+                {error}
+              </p>
+            ) : null}
+          </div>
+        </li>
+      </ol>
     </div>
   );
 }

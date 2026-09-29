@@ -16,7 +16,16 @@ import {
   listOrders,
 } from "../api/_lib/ordersAdmin.js";
 import { requireOwnedOrderId } from "../api/_lib/orderToken.js";
-import { normalisePaymentReference, ORDER_STATUS, PAYMENT_STATUS } from "../shared/ordering.js";
+import {
+  normalisePaymentReference,
+  customerPaymentCopy,
+  customerPaymentState,
+  isAwaitingUtr,
+  CUSTOMER_PAYMENT_STATE,
+  ORDER_STATUS,
+  PAYMENT_METHOD,
+  PAYMENT_STATUS,
+} from "../shared/ordering.js";
 import { orderSummaryText, whatsappLink } from "../api/_lib/notify.js";
 
 process.env.JOC_ALLOW_MEMORY_STORE = "true";
@@ -700,6 +709,67 @@ check("the UPI intent carries a readable note, not \"JOC undefined\"", withUpiEn
   assert.ok(intent.uri.includes("tr=JOC-20260929-0007"), "the order id must be the payment reference");
   assert.ok(intent.qrSvg.startsWith("<svg"));
 }));
+
+// The customer-facing UPI panel is mounted by OrderConfirmation only while
+// paymentStatus is PENDING; the moment a UTR is accepted the order becomes
+// PAYMENT_VERIFICATION_REQUIRED and the parent unmounts it in favour of its own
+// copy. These two checks pin that hand-off down.
+//
+// They exist because the panel once grew its own "UTR received" branch, guarded by
+// `!isAwaitingUtr(order)`. The panel is only ever rendered in the PENDING state,
+// where isAwaitingUtr is unconditionally true, so that branch was permanently
+// unreachable. The assertion here is the reachable half of the contract; the
+// unreachable half is a bug the build cannot catch, which is exactly why the
+// render condition is asserted rather than the branch.
+check("a pending UPI order is the only state that asks the customer to pay", () => {
+  const pending = {
+    paymentMethod: PAYMENT_METHOD.UPI,
+    paymentStatus: PAYMENT_STATUS.PENDING,
+    orderStatus: ORDER_STATUS.RECEIVED,
+  };
+  assert.equal(
+    customerPaymentState(pending),
+    CUSTOMER_PAYMENT_STATE.AWAITING_PAYMENT,
+    "the UPI panel only renders in this state, so this is the state it must describe",
+  );
+  assert.equal(isAwaitingUtr(pending), true, "the customer still owes money, so the panel is the right thing to show");
+});
+
+check("a submitted UTR is described as awaiting verification, never as paid", () => {
+  const submitted = {
+    paymentMethod: PAYMENT_METHOD.UPI,
+    paymentStatus: PAYMENT_STATUS.PAYMENT_VERIFICATION_REQUIRED,
+    orderStatus: ORDER_STATUS.RECEIVED,
+    paymentReference: "421234567890",
+  };
+  assert.equal(customerPaymentState(submitted), CUSTOMER_PAYMENT_STATE.VERIFICATION_REQUIRED);
+  assert.equal(
+    isAwaitingUtr(submitted),
+    false,
+    "once a reference is in, the pay-now panel must unmount rather than ask for money again",
+  );
+
+  const { title, lead } = customerPaymentCopy(submitted);
+  assert.match(title, /verification/i, "the customer must be told the UTR is being checked");
+  assert.match(lead, /UTR/i, "the copy should confirm we have the reference they typed");
+  assert.doesNotMatch(
+    `${title} ${lead}`,
+    /\bpaid\b/i,
+    "submitting a UTR does not mark the order paid, and the copy must never imply it did",
+  );
+  assert.doesNotMatch(lead, /pay (using|the exact|now)/i, "a customer who has already paid must not be told to pay again");
+});
+
+check("cash on delivery never asks the customer to pay online", () => {
+  const cod = {
+    paymentMethod: PAYMENT_METHOD.COD,
+    paymentStatus: PAYMENT_STATUS.PENDING,
+    orderStatus: ORDER_STATUS.RECEIVED,
+  };
+  assert.equal(customerPaymentState(cod), CUSTOMER_PAYMENT_STATE.ORDER_RECEIVED);
+  assert.equal(isAwaitingUtr(cod), false);
+  assert.doesNotMatch(customerPaymentCopy(cod).lead, /UPI|UTR/i, "a cash order is complete as far as ordering goes");
+});
 
 check("a UPI order can be converted to Cash on Delivery by its owner", withUpiEnv(async () => {
   const created = await placeOrder(checkoutBody("UPI"), "e2e-switch-0001");

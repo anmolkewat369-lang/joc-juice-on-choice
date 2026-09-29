@@ -176,16 +176,6 @@
   color: var(--berry-600);
 }
 
-.verified {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.55rem;
-  align-items: start;
-  font-size: var(--fs-sm);
-  line-height: 1.6;
-  color: var(--green-800);
-}
-
 .warning {
   font-size: var(--fs-sm);
   line-height: 1.6;
