@@ -142,6 +142,21 @@ check("distance is rendered to one decimal place, and nothing else", () => {
   assert.equal(formatDistanceKm(null), "—");
 });
 
+check("Geocoding and Routes use their documented server-side API-key auth", withMaps({}, async () => {
+  const firstCall = maps.calls.length;
+  const checked = await checkDelivery({ address: ADDRESS });
+  assert.equal(checked.eligible, true);
+
+  const calls = maps.calls.slice(firstCall);
+  const geocodeCall = calls.find((call) => call.url.includes("/maps/api/geocode/json"));
+  const routeCall = calls.find((call) => call.url.includes("routes.googleapis.com"));
+  assert.ok(geocodeCall, "Geocoding must be called");
+  assert.ok(routeCall, "Routes must be called");
+  assert.equal(new URL(geocodeCall.url).searchParams.get("key"), process.env.GOOGLE_MAPS_API_KEY);
+  assert.equal(geocodeCall.init.headers?.["X-Goog-Api-Key"], undefined);
+  assert.equal(routeCall.init.headers?.["X-Goog-Api-Key"], process.env.GOOGLE_MAPS_API_KEY);
+}));
+
 /* ------------------------------- the outcome ------------------------------- */
 
 check(

@@ -228,11 +228,10 @@ export async function geocodeAddress({ address, landmark, origin }) {
   url.searchParams.set("address", query);
   url.searchParams.set("region", "in");
   url.searchParams.set("components", "country:IN");
+  url.searchParams.set("key", key);
   if (origin) url.searchParams.set("location_bias", `rectangle:${biasRectangle(origin)}`);
 
-  const payload = await requestJson(url, {
-    headers: { "X-Goog-Api-Key": key },
-  });
+  const payload = await requestJson(url);
 
   const status = String(payload.status ?? "");
   if (status !== "OK") {
