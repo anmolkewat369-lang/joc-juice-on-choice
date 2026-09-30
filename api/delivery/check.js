@@ -105,7 +105,7 @@ async function deliveryRule(req, res) {
     radiusKm: config.radiusKm,
     radiusMeters: config.radiusMeters,
     configured: config.configured,
-    rule: DELIVERY_RULE_NOTE,
+    rule: DELIVERY_RULE_NOTE(config.radiusKm),
   });
 }
 

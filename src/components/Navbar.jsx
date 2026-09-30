@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { MapPin, Menu as MenuIcon, X, MessageCircle, ShoppingBag } from "lucide-react";
-import { BRAND, NAV_LINKS, WHATSAPP_URL } from "../data/business";
+import { MapPin, Menu as MenuIcon, X, ShoppingBag } from "lucide-react";
+import { BRAND, LINKS, NAV_LINKS } from "../data/business";
 import { useCart } from "../cart/cartStore";
 import { cartHref } from "../lib/route";
 import styles from "./Navbar.module.css";
@@ -114,12 +114,12 @@ export default function Navbar() {
           </a>
           <a
             className={`btn btn--primary ${styles.enquire}`}
-            href={WHATSAPP_URL}
+            href={LINKS.maps}
             target="_blank"
             rel="noreferrer"
           >
-            <MessageCircle size={17} aria-hidden="true" />
-            Enquire Now
+            <MapPin size={17} aria-hidden="true" />
+            Get Directions
           </a>
           <button
             type="button"
@@ -158,13 +158,13 @@ export default function Navbar() {
         <div className={styles.mobileActions}>
           <a
             className="btn btn--whatsapp btn--block"
-            href={WHATSAPP_URL}
+            href={LINKS.maps}
             target="_blank"
             rel="noreferrer"
             onClick={closeMenu}
           >
-            <MessageCircle size={18} aria-hidden="true" />
-            Enquire on WhatsApp
+            <MapPin size={18} aria-hidden="true" />
+            Get Directions
           </a>
           <a
             className="btn btn--ghost btn--block"

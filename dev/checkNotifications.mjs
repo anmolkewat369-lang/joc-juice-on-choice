@@ -122,7 +122,7 @@ const baseRecord = (over = {}) => ({
     outcome: "AVAILABLE",
     eligible: true,
     distanceMeters: 4200,
-    radiusKm: 5,
+    radiusKm: 4,
     checkedAt: new Date().toISOString(),
   },
   ...over,

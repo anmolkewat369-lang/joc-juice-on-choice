@@ -18,7 +18,7 @@
  */
 
 /** Used when JOC_DELIVERY_RADIUS_KM is unset. The current JOC business rule. */
-export const DELIVERY_RADIUS_FALLBACK_KM = 5;
+export const DELIVERY_RADIUS_FALLBACK_KM = 4;
 
 /** Guard rails on the configured radius, so a typo cannot open or close the area. */
 export const DELIVERY_RADIUS_MIN_KM = 0.5;
@@ -49,7 +49,7 @@ export const DELIVERABLE_OUTCOMES = new Set([DELIVERY_OUTCOME.AVAILABLE]);
  *
  * `km` is already formatted by the caller, so the frontend and the server cannot
  * render the same number two different ways. Only `outOfRange` needs the radius —
- * inside the area, "we deliver within 5 km" is redundant with the distance the
+ * inside the area, the rule is redundant with the distance the
  * customer was just shown.
  */
 export const DELIVERY_MESSAGES = {
@@ -69,8 +69,8 @@ export const DELIVERY_MESSAGES = {
 };
 
 /** One line above the address fields, so the rule is stated before it is tested. */
-export const DELIVERY_RULE_NOTE =
-  "JOC delivers within a fixed driving distance of the store. We check the road distance to your address before you order.";
+export const DELIVERY_RULE_NOTE = (radiusKm = DELIVERY_RADIUS_FALLBACK_KM) =>
+  `JOC currently delivers within ${radiusKm} km driving distance of the store. We check the actual road distance to your address before you order.`;
 
 /** The delivery-area rule as the admin sees it on an order. */
 export const DELIVERY_RULE_LABEL = (radiusKm) => `Within ${radiusKm} km by road`;
@@ -81,7 +81,7 @@ export const DELIVERY_RULE_LABEL = (radiusKm) => `Within ${radiusKm} km by road`
  * The configured radius, clamped to a sane range.
  *
  * Values arrive from an environment variable that an operator types by hand, so
- * "5 km", "5km" and " 5 " all have to work and "0" or "-3" must not silently
+ * "4 km", "4km" and " 4 " all have to work and "0" or "-3" must not silently
  * become a rule that rejects every order or a rule that accepts everywhere.
  */
 export function normaliseDeliveryRadiusKm(raw) {
@@ -96,7 +96,7 @@ export function normaliseDeliveryRadiusKm(raw) {
  * The radius in METRES — the unit the whole comparison happens in.
  *
  * Metres rather than kilometres because the Routes API returns metres, and
- * converting twice (metres -> km -> metres) is how a 5000 m boundary ends up
+ * converting twice (metres -> km -> metres) is how a 4000 m boundary ends up
  * being compared as 4999.9997 and rejects a customer standing exactly on it.
  */
 export const radiusMeters = (radiusKm) =>

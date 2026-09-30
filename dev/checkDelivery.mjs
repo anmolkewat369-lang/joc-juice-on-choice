@@ -37,7 +37,7 @@ process.env.JOC_STORE_LONGITUDE = "79.9864";
 /* ------------------------------ provider stub ------------------------------ */
 
 const maps = {
-  distanceMeters: 4200,
+  distanceMeters: 3200,
   geocodeStatus: "OK",
   geocodeResults: null,
   routesResponse: null,
@@ -85,7 +85,7 @@ const ADDRESS = "Civil Lines, Jabalpur";
 /** Run `fn` against a specific provider answer, then put the stub back. */
 const withMaps = (over, fn) => async () => {
   const before = { ...maps };
-  Object.assign(maps, { distanceMeters: 4200, geocodeStatus: "OK", routesResponse: null, httpStatus: 200 }, over);
+  Object.assign(maps, { distanceMeters: 3200, geocodeStatus: "OK", routesResponse: null, httpStatus: 200 }, over);
   // The cache is keyed by address, so a case that changes the provider answer
   // would otherwise be served the previous case's cached result.
   clearDeliveryCache();
@@ -103,10 +103,10 @@ const check = (name, fn) => checks.push([name, fn]);
 /* -------------------------------- the rule --------------------------------- */
 
 check("the radius comparison is inclusive and works in whole metres", () => {
-  assert.equal(radiusMeters(5), 5000, "km to metres must not accumulate float error");
-  assert.equal(isWithinDeliveryRadius(4999, 5), true);
-  assert.equal(isWithinDeliveryRadius(5000, 5), true, "exactly on the limit is inside");
-  assert.equal(isWithinDeliveryRadius(5001, 5), false);
+  assert.equal(radiusMeters(4), 4000, "km to metres must not accumulate float error");
+  assert.equal(isWithinDeliveryRadius(3999, 4), true);
+  assert.equal(isWithinDeliveryRadius(4000, 4), true, "exactly on the limit is inside");
+  assert.equal(isWithinDeliveryRadius(4001, 4), false);
   // The rounding is in whole metres on purpose, so a boundary address cannot be
   // rejected by a fraction of a metre of floating-point noise.
   assert.equal(isWithinDeliveryRadius(4999.6, 5), true);
@@ -115,7 +115,7 @@ check("the radius comparison is inclusive and works in whole metres", () => {
 check("an unknown or nonsensical distance is never 'inside the radius'", () => {
   for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, -1, null, undefined, "abc"]) {
     assert.equal(
-      isWithinDeliveryRadius(bad, 5),
+      isWithinDeliveryRadius(bad, 4),
       false,
       `${String(bad)} must not pass the delivery rule`,
     );
@@ -146,41 +146,41 @@ check("distance is rendered to one decimal place, and nothing else", () => {
 
 check(
   "an address inside the radius is available, with the road distance shown",
-  withMaps({ distanceMeters: 4200 }, async () => {
+  withMaps({ distanceMeters: 3200 }, async () => {
     const checked = await checkDelivery({ address: ADDRESS });
     assert.equal(checked.outcome, DELIVERY_OUTCOME.AVAILABLE);
     assert.equal(checked.eligible, true);
-    assert.equal(checked.distanceMeters, 4200);
-    assert.equal(checked.radiusMeters, 5000);
-    assert.match(checked.message, /4\.2 km/, "the customer is told how far, not just 'yes'");
+    assert.equal(checked.distanceMeters, 3200);
+    assert.equal(checked.radiusMeters, 4000);
+    assert.match(checked.message, /3\.2 km/, "the customer is told how far, not just 'yes'");
   }),
 );
 
 check(
-  "an address exactly on the 5 km boundary is deliverable",
-  withMaps({ distanceMeters: 5000 }, async () => {
+  "an address exactly on the 4 km boundary is deliverable",
+  withMaps({ distanceMeters: 4000 }, async () => {
     const checked = await checkDelivery({ address: ADDRESS });
     assert.equal(checked.eligible, true, "the limit is inclusive");
-    assert.equal(checked.distanceMeters, 5000);
+    assert.equal(checked.distanceMeters, 4000);
   }),
 );
 
 check(
   "one metre beyond the boundary is refused, and the message names the limit",
-  withMaps({ distanceMeters: 5001 }, async () => {
+  withMaps({ distanceMeters: 4001 }, async () => {
     const checked = await checkDelivery({ address: ADDRESS });
     assert.equal(checked.outcome, DELIVERY_OUTCOME.OUT_OF_RANGE);
     assert.equal(checked.eligible, false);
-    assert.match(checked.message, /5 km/, "the customer needs the number to argue with");
+    assert.match(checked.message, /4 km/, "the customer needs the number to argue with");
   }),
 );
 
 check(
   "a fractional distance returned by the API is compared in whole metres",
-  withMaps({ distanceMeters: 4999.7 }, async () => {
+  withMaps({ distanceMeters: 3999.7 }, async () => {
     const checked = await checkDelivery({ address: ADDRESS });
-    assert.equal(checked.eligible, true, "4999.7 m rounds to 5000 m, which is inside");
-    assert.equal(checked.distanceMeters, 5000, "the stored distance is a whole metre count");
+    assert.equal(checked.eligible, true, "3999.7 m rounds to 4000 m, which is inside");
+    assert.equal(checked.distanceMeters, 4000, "the stored distance is a whole metre count");
   }),
 );
 
@@ -261,7 +261,7 @@ check(
   },
 );
 
-check("a determined answer is cached, an unknown one is not", withMaps({ distanceMeters: 4200 }, async () => {
+check("a determined answer is cached, an unknown one is not", withMaps({ distanceMeters: 3200 }, async () => {
   const first = await checkDelivery({ address: ADDRESS });
   const callsAfterFirst = maps.calls.length;
   const second = await checkDelivery({ address: ADDRESS });
@@ -273,7 +273,7 @@ check("a determined answer is cached, an unknown one is not", withMaps({ distanc
   assert.ok(maps.calls.length > callsAfterFirst, "a new address is not served a cached answer");
 }));
 
-check("the cache never stores the address itself", withMaps({ distanceMeters: 4200 }, async () => {
+check("the cache never stores the address itself", withMaps({ distanceMeters: 3200 }, async () => {
   await checkDelivery({ address: ADDRESS, landmark: "Near the petrol pump" });
   // The key is internal, so the observable claim is narrower and still true: the
   // cached answer carries no address text.
@@ -346,12 +346,12 @@ const placeOrder = (body, key) =>
 
 check(
   "an order in range is created and stores the distance the server measured",
-  withMaps({ distanceMeters: 4200 }, async () => {
+  withMaps({ distanceMeters: 3200 }, async () => {
     const res = await placeOrder(checkoutBody(), "delivery-in-range-1");
     assert.equal(res.statusCode, 201, JSON.stringify(res.payload));
     assert.equal(res.payload.order.delivery.eligible, true);
     assert.equal(res.payload.order.delivery.verified, true);
-    assert.equal(res.payload.order.delivery.distanceMeters, 4200);
+    assert.equal(res.payload.order.delivery.distanceMeters, 3200);
     assert.equal(res.payload.order.delivery.outcome, DELIVERY_OUTCOME.AVAILABLE);
     assert.ok(res.payload.order.delivery.checkedAt, "the check is dated");
   }),
@@ -366,7 +366,7 @@ check(
     // details, so the UI has one branch and the message still differs.
     assert.equal(res.payload.error.code, "delivery_unavailable");
     assert.equal(res.payload.error.details?.outcome, DELIVERY_OUTCOME.OUT_OF_RANGE);
-    assert.match(res.payload.error.message, /5 km/);
+    assert.match(res.payload.error.message, /4 km/);
 
     const store = await getStore();
     const listed = await store.listOrders({ limit: 100, offset: 0 });
@@ -380,7 +380,7 @@ check(
 
 check(
   "the customer cannot post a delivery verdict of their own",
-  withMaps({ distanceMeters: 4200 }, async () => {
+  withMaps({ distanceMeters: 3200 }, async () => {
     const res = await placeOrder(
       checkoutBody({
         delivery: { eligible: true, distanceMeters: 10, outcome: DELIVERY_OUTCOME.AVAILABLE },
@@ -391,7 +391,7 @@ check(
     assert.equal(res.statusCode, 201);
     assert.equal(
       res.payload.order.delivery.distanceMeters,
-      4200,
+      3200,
       "the stored distance is the one the provider returned, not the client's",
     );
   }),
@@ -418,7 +418,7 @@ check(
 
 check(
   "an idempotent replay is answered from the stored order without re-measuring",
-  withMaps({ distanceMeters: 4200 }, async () => {
+  withMaps({ distanceMeters: 3200 }, async () => {
     const key = "delivery-replay-1";
     const first = await placeOrder(checkoutBody(), key);
     assert.equal(first.statusCode, 201);

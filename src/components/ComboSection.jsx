@@ -1,8 +1,7 @@
-import { MessageCircle } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import MenuCard from "./MenuCard";
 import Reveal from "./Reveal";
 import { comboItems } from "../data/menu";
-import { WHATSAPP_URL } from "../data/business";
 import styles from "./ComboSection.module.css";
 
 export default function ComboSection() {
@@ -21,12 +20,10 @@ export default function ComboSection() {
           </div>
           <a
             className={`btn btn--lime ${styles.cta}`}
-            href={WHATSAPP_URL}
-            target="_blank"
-            rel="noreferrer"
+            href="#menu"
           >
-            <MessageCircle size={18} aria-hidden="true" />
-            Ask about combos
+            <ArrowRight size={18} aria-hidden="true" />
+            Explore Menu
           </a>
         </div>
 

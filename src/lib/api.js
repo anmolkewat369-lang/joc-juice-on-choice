@@ -140,8 +140,7 @@ export const getOrderDetail = (orderId, { signal, token } = {}) => {
     );
   }
   // The secret travels in a header, not the query string, so it never lands in
-  // server access logs. The server also accepts `?token=` when
-  // JOC_ALLOW_TOKEN_QUERY=true, but only for links that were intentionally shared.
+  // server access logs or browser history.
   return request(`/api/orders/${encodeURIComponent(orderId)}`, {
     signal,
     headers: { "X-Order-Token": secret },

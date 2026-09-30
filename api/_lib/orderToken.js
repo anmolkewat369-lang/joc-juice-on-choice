@@ -6,11 +6,9 @@
  * guessable, so an id alone must never be enough to see a customer's name,
  * phone and address, or to move their order.
  *
- * The secret travels in the `X-Order-Token` header. A `?token=` query-string
- * fallback used to exist for "deep links that were deliberately shared" — it is
- * OFF by default, because anything in a query string lands in access logs,
- * browser history and referrers. It stays available behind an explicit
- * JOC_ALLOW_TOKEN_QUERY=true for local debugging only.
+ * The secret travels only in the `X-Order-Token` header. Query-string tokens are
+ * never accepted because URLs can land in access logs, browser history and
+ * referrers.
  *
  * Comparison is constant-time, and a wrong token is indistinguishable from an
  * unknown order: both are 404.
@@ -37,9 +35,6 @@ export const isOrderId = (value) => ORDER_ID_RE.test(String(value ?? ""));
 const notFound = () =>
   new ApiError(404, "We could not find that order on this device.", "order_not_found");
 
-export const isTokenQueryAllowed = () =>
-  String(process.env.JOC_ALLOW_TOKEN_QUERY ?? "false").toLowerCase() === "true";
-
 /** Accepts either casing; Vercel lower-cases incoming header names. */
 function headerToken(req) {
   const raw = req?.headers?.[ORDER_TOKEN_HEADER] ?? req?.headers?.["X-Order-Token"];
@@ -47,15 +42,9 @@ function headerToken(req) {
   return typeof token === "string" && token.length > 0 ? token : null;
 }
 
-function queryToken(req) {
-  const raw = req?.query?.token;
-  const token = Array.isArray(raw) ? raw[0] : raw;
-  return typeof token === "string" && token.length > 0 ? token : null;
-}
-
-/** The secret this request presents, or null. Header first, always. */
+/** The secret this request presents, or null. */
 export function presentedToken(req) {
-  return headerToken(req) ?? (isTokenQueryAllowed() ? queryToken(req) : null);
+  return headerToken(req);
 }
 
 /** Length-safe constant-time comparison against the stored SHA-256 hash. */

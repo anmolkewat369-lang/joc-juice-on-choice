@@ -1,6 +1,6 @@
 import { ArrowRight, MapPin, ShoppingBag, Sparkles } from "lucide-react";
 import FoodArt from "./FoodArt";
-import { BRAND, DISCLAIMER_SHORT } from "../data/business";
+import { BRAND } from "../data/business";
 import { cartHref } from "../lib/route";
 import styles from "./Hero.module.css";
 
@@ -18,7 +18,7 @@ export default function Hero() {
         <div className={styles.copy}>
           <p className={styles.badge}>
             <Sparkles size={14} aria-hidden="true" />
-            {BRAND.name} — {DISCLAIMER_SHORT}
+            {BRAND.name} — {BRAND.categoryLine}
           </p>
 
           <h1 className={styles.title}>

@@ -1,13 +1,9 @@
-# JOC — Juice On Choice · Website Concept
+# JOC — Juice On Choice
 
-A premium single-page concept website for **JOC Juice and Cafe**, Dixit Colony,
-Marhatal, Jabalpur, with a complete guest ordering flow (cart → checkout →
-confirmation) and server-side order storage.
-
-> **This is a concept/demo build prepared for a website proposal.** It is not the
-> official website of JOC Juice and Cafe. Menu and pricing are demo data taken from
-> the business's current public listing and must be confirmed with the business
-> before production launch.
+The JOC Juice and Cafe website for Dixit Colony, Marhatal, Jabalpur, with guest
+ordering (cart → checkout → confirmation), customer order tracking, and
+server-side order storage. Menu and prices are based on the current public listing
+and may change.
 
 ## Stack
 
@@ -45,8 +41,8 @@ them work against the in-memory store, so none needs a database or a network.
 
 | Script | What it pins down |
 | --- | --- |
-| `dev/checkGuards.mjs` | 49 checks over the guard rules: order-token ownership, UTR normalisation, admin auth (unauthenticated, forged cookie, no session secret), status-transition legality, `PAID` reachable only by admin, the checkout field-error contract, and that COD never asks the customer to pay online |
-| `dev/checkDelivery.mjs` | 23 checks on the 5 km rule: inclusive metre comparison, clamped radius input, every refusal outcome, fail-closed behaviour when Google is missing/broken/unconfigured, the order route refusing out-of-range orders, idempotent replay, and that the customer cannot post their own verdict |
+| `dev/checkGuards.mjs` | 53 checks over the guard rules: order-token ownership, UTR normalisation, admin auth (unauthenticated, forged cookie, no session secret), status-transition legality, `PAID` reachable only by admin, the checkout field-error contract, and that COD never asks the customer to pay online |
+| `dev/checkDelivery.mjs` | 26 checks on the 4 km rule: inclusive metre comparison, clamped radius input, every refusal outcome, fail-closed behaviour when Google is missing/broken/unconfigured, the order route refusing out-of-range orders, idempotent replay, and that the customer cannot post their own verdict |
 | `dev/checkNotifications.mjs` | 17 checks on the send ledger: exactly-once under repeated and concurrent triggers, distinct-status dedupe, skipped-vs-failed recording, a broken provider never failing an order, an unreachable ledger still sending, and the tracking token never appearing in a payload |
 | `dev/checkQr.mjs` | Decodes the server-generated UPI QR with **jsQR** — an independent implementation — across every payload length 1..213, several error-correction levels, and realistic `upi://pay` intent strings |
 
@@ -73,7 +69,7 @@ end-to-end order case.
   refresh or retry resolves to the same order. The replay is resolved *before* the
   delivery check, so re-sending a request never costs a Google call and never
   invalidates an order already placed.
-- **Delivery area**: 5 km of driving distance, measured by the Google Routes API
+- **Delivery area**: 4 km of driving distance, measured by the Google Routes API
   and compared in whole metres. See [The delivery rule](#the-delivery-rule).
 - **Order lookup**: order ids (e.g. `JOC-20260928-0001`) are public, so lookup
   requires a per-order secret. It is returned once at creation, kept in
@@ -113,7 +109,7 @@ rule a customer can argue with, so it is worth being precise about what it is.
   shipping one next to the real rule is how a crow-flies radius quietly becomes
   the delivery policy.
 - **It is inclusive.** `distanceMeters <= radiusMeters`, compared as integers, so
-  an address exactly at 5000 m is deliverable and float noise cannot reject
+  an address exactly at 4000 m is deliverable and float noise cannot reject
   someone standing on the boundary.
 - **It fails closed.** A missing key, missing store coordinates, an address Google
   cannot place, an ambiguous address, a timeout or a quota error all produce "we
@@ -186,9 +182,9 @@ Email is optional and is never allowed to affect whether an order succeeds.
 - **The admin can see what went out.** The order drawer lists the ledger with
   masked recipients (`a•••••@gmail.com`), so "did they get the message?" is
   answerable on screen without reading logs.
-- **WhatsApp stays manual.** The dashboard still opens a `wa.me` deep link for the
-  admin to press send on. Nothing is ever sent to a customer's number
-  automatically.
+- **WhatsApp is not configured.** No automated WhatsApp messages are sent. Any
+  future integration requires an official JOC business number and a separate
+  provider implementation.
 
 ## Environment
 
@@ -202,14 +198,13 @@ Copy `.env.example` → `.env.local` for local development. All values are
 | `JOC_ALLOW_MEMORY_STORE` | Optional | Only needed to force in-memory mode on a production build |
 | `GOOGLE_MAPS_API_KEY` | **Required to take any order** | Server-only secret. Needs the Geocoding API and Routes API enabled |
 | `JOC_STORE_LATITUDE` / `JOC_STORE_LONGITUDE` | **Required to take any order** | Decimal degrees for the store. Get them from Google Maps; do not guess |
-| `JOC_DELIVERY_RADIUS_KM` | Optional | Defaults to `5`; clamped to 0.5–50 so a typo cannot open or close the area |
+| `JOC_DELIVERY_RADIUS_KM` | Optional | Defaults to `4`; clamped to 0.5–50 so a typo cannot open or close the area |
 | `JOC_SITE_URL` | Optional | Base URL for emailed tracking links. Defaults to the production URL |
 | `JOC_PAYMENT_PROVIDER` | Optional | `manual_upi` (default) or `razorpay`. Selects which rail settles a digital payment |
-| `JOC_UPI_ID` | **For the UPI option at checkout** | `handle@bank`, e.g. `9630194023@pthdfc`. **Not a secret** — it is shown to customers and embedded in the payment QR. Without it, checkout offers Cash on Delivery only |
+| `JOC_UPI_ID` | **For the UPI option at checkout** | The JOC UPI handle. **Not a secret** — it is shown to customers and embedded in the payment QR. Without it, checkout offers Cash on Delivery only |
 | `JOC_ADMIN_SESSION_SECRET` | For `/admin` | ≥32 chars, random. Signs the admin session cookie. Never commit |
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | For `/admin` | Supabase Auth only. The anon key cannot read any table (RLS is enabled with no policies) |
 | `JOC_ADMIN_EMAILS` | Optional | Allow-list. Empty means any user who can sign in |
-| `JOC_WHATSAPP_NUMBER` | Optional | `919630194023`-style digits, no `+`. Builds the admin's WhatsApp deep link |
 | `JOC_NOTIFY_EMAIL` / `JOC_NOTIFY_FROM` / `RESEND_API_KEY` | Optional | Email notifications. All three needed; the key is a secret |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Only if provider is `razorpay` | `rzp_test_...` / `rzp_live_...`. The secret must never be committed |
 | `RAZORPAY_TEST_MODE` | Optional | Defaults `true`; live money only when explicitly `false` AND live keys are set |
@@ -262,7 +257,7 @@ fragment-scoped.
    Cloud key with the **Geocoding API** and **Routes API** enabled and set
    `GOOGLE_MAPS_API_KEY`. Then look the store up in Google Maps, copy the
    coordinates off the pin, and set `JOC_STORE_LATITUDE` / `JOC_STORE_LONGITUDE`.
-   `JOC_DELIVERY_RADIUS_KM` defaults to 5. Verify with
+  `JOC_DELIVERY_RADIUS_KM` defaults to 4. Verify with
    `GET /api/delivery/config`, then place one real test order from a nearby and a
    far address and confirm the two verdicts.
 3. **Payments**: set `JOC_PAYMENT_PROVIDER=manual_upi` and `JOC_UPI_ID` to your

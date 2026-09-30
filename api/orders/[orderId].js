@@ -11,9 +11,8 @@
  * payment routes — a second copy of this comparison is a second chance to get
  * it subtly wrong.
  *
- * Query-string tokens (`?token=`) are off by default. A URL ends up in browser
- * history, in `Referer` headers and in proxy logs, and an order URL is often
- * shared. Set JOC_ALLOW_TOKEN_QUERY=true only if a deep link genuinely needs it.
+ * Query-string tokens are never accepted. A URL ends up in browser history, in
+ * `Referer` headers and in proxy logs, and an order URL is often shared.
  */
 
 import { ApiError, methodGuard, sendError, sendJson, clientKey } from "../_lib/http.js";

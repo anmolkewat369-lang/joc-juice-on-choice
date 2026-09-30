@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { MessageCircle, Phone } from "lucide-react";
-import { CONTACT, MAILTO_URL, WHATSAPP_URL } from "../data/business";
+import { MapPin } from "lucide-react";
+import { LINKS } from "../data/business";
 import styles from "./StickyCta.module.css";
 
 /**
  * Compact mobile action bar. Appears after the hero, and steps aside once the
- * enquiry section is on screen so it never covers the real contact details.
+ * location section is on screen so it never covers the address details.
  */
 export default function StickyCta() {
   const [visible, setVisible] = useState(false);
@@ -38,22 +38,13 @@ export default function StickyCta() {
       className={`${styles.bar} ${visible ? styles.barVisible : ""} ${hidden ? styles.barHidden : ""}`}
     >
       <a
-        className={`btn btn--whatsapp btn--block ${styles.wa}`}
-        href={WHATSAPP_URL}
+        className={`btn btn--primary btn--block ${styles.map}`}
+        href={LINKS.maps}
         target="_blank"
         rel="noreferrer"
       >
-        <MessageCircle size={19} aria-hidden="true" />
-        WhatsApp Enquiry
-      </a>
-      <a className={styles.call} href={`tel:${CONTACT.phoneRaw}`} aria-label={`Call ${CONTACT.phoneDisplay}`}>
-        <Phone size={19} aria-hidden="true" />
-      </a>
-      <a className={styles.mail} href={MAILTO_URL} aria-label={`Email ${CONTACT.email}`}>
-        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="4" width="20" height="16" rx="3" />
-          <path d="m3 6 9 6 9-6" />
-        </svg>
+        <MapPin size={19} aria-hidden="true" />
+        Get Directions
       </a>
     </div>
   );

@@ -47,7 +47,7 @@ delete process.env.DATABASE_URL;
  * can silently depend on the previous one's answer.
  */
 const maps = {
-  distanceMeters: 4200,
+  distanceMeters: 3200,
   /** null to simulate the provider being unreachable or erroring. */
   routeResponse: null,
   /** "ZERO_RESULTS" makes the geocoder find nothing. */
@@ -962,13 +962,20 @@ check("a UPI order can be converted to Cash on Delivery by its owner", withUpiEn
 }));
 
 check("an order token is never accepted from a query string", withUpiEnv(async () => {
-  const created = await placeOrder(checkoutBody("UPI"), "e2e-tokq-0001");
-  const token = created.payload.accessToken;
-  const res = await callRoute("../api/orders/utr.js", {
-    query: { orderId: created.payload.order.orderId, token },
-    body: { orderId: created.payload.order.orderId, paymentReference: "421234567895" },
-  });
-  assert.equal(res.statusCode, 404, "the token must travel in the header, never the URL");
+  const previous = process.env.JOC_ALLOW_TOKEN_QUERY;
+  process.env.JOC_ALLOW_TOKEN_QUERY = "true";
+  try {
+    const created = await placeOrder(checkoutBody("UPI"), "e2e-tokq-0001");
+    const token = created.payload.accessToken;
+    const res = await callRoute("../api/orders/utr.js", {
+      query: { orderId: created.payload.order.orderId, token },
+      body: { orderId: created.payload.order.orderId, paymentReference: "421234567895" },
+    });
+    assert.equal(res.statusCode, 404, "the token must travel in the header, never the URL");
+  } finally {
+    if (previous === undefined) delete process.env.JOC_ALLOW_TOKEN_QUERY;
+    else process.env.JOC_ALLOW_TOKEN_QUERY = previous;
+  }
 }));
 
 /* ----------------------------------- run ---------------------------------- */

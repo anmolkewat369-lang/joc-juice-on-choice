@@ -1,13 +1,4 @@
-﻿import { Mail, MessageCircle } from "lucide-react";
-import {
-  BRAND,
-  CONTACT,
-  DISCLAIMER_FULL,
-  LINKS,
-  MAILTO_URL,
-  NAV_LINKS,
-  WHATSAPP_URL,
-} from "../data/business";
+﻿import { ADDRESS, BRAND, LINKS, NAV_LINKS } from "../data/business";
 import styles from "./Footer.module.css";
 
 export default function Footer() {
@@ -23,21 +14,6 @@ export default function Footer() {
               <span>{BRAND.tagline}</span>
             </p>
             <p className={styles.categoryLine}>{BRAND.categoryLine}</p>
-            <p className={styles.address}>
-              {BRAND.name}
-              <br />
-              Plot No. 207, Dixit Colony, Marhatal
-              <br />
-              Jabalpur, Madhya Pradesh â€” 482002
-            </p>
-            <a
-              className={styles.mapLink}
-              href={LINKS.maps}
-              target="_blank"
-              rel="noreferrer"
-            >
-              View on Google Maps
-            </a>
           </div>
 
           <nav aria-label="Footer">
@@ -52,46 +28,29 @@ export default function Footer() {
               ))}
               <li>
                 <a className={styles.link} href="#contact">
-                  Enquire
+                  Visit JOC
                 </a>
               </li>
             </ul>
           </nav>
 
           <div>
-            <h2 className={styles.colTitle}>{CONTACT.role}</h2>
-            <p className={styles.devName}>{CONTACT.name}</p>
-            <ul className={styles.links}>
-              <li>
-                <a className={styles.link} href={WHATSAPP_URL} target="_blank" rel="noreferrer">
-                  <MessageCircle size={15} aria-hidden="true" />
-                  {CONTACT.phoneDisplay}
-                </a>
-              </li>
-              <li>
-                <a className={styles.link} href={MAILTO_URL}>
-                  <Mail size={15} aria-hidden="true" />
-                  {CONTACT.email}
-                </a>
-              </li>
-            </ul>
-            <p className={styles.devNote}>
-              Temporary proposal contact â€” not an official JOC contact.
+            <h2 className={styles.colTitle}>Visit JOC</h2>
+            <p className={styles.address}>
+              {ADDRESS.line1}
+              <br />
+              {ADDRESS.line2}
+              <br />
+              {ADDRESS.country}
             </p>
+            <a className={styles.mapLink} href={LINKS.maps} target="_blank" rel="noreferrer">
+              Get directions
+            </a>
           </div>
         </div>
 
-        <div className={styles.disclaimer}>
-          <p className={styles.disclaimerText}>{DISCLAIMER_FULL}</p>
-        </div>
-
         <div className={styles.bottom}>
-          <p>
-            Â© {year} {BRAND.name}. Concept website.
-          </p>
-          <p className={styles.credit}>
-            Website concept by <strong>{CONTACT.name}</strong>
-          </p>
+          <p>Copyright {year} {BRAND.name}.</p>
         </div>
       </div>
     </footer>

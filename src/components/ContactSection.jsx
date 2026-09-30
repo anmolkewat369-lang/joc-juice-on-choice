@@ -1,5 +1,5 @@
-import { Mail, MessageCircle, Phone } from "lucide-react";
-import { CONTACT, MAILTO_URL, WHATSAPP_URL } from "../data/business";
+import { MapPin } from "lucide-react";
+import { ADDRESS, BRAND, LINKS } from "../data/business";
 import styles from "./ContactSection.module.css";
 
 export default function ContactSection() {
@@ -8,62 +8,47 @@ export default function ContactSection() {
       <div className="container">
         <div className={styles.wrap}>
           <div className={styles.copy}>
-            <p className="eyebrow">Website concept</p>
-            <h2 id="contact-title">Want a Website Like This?</h2>
+            <p className="eyebrow">Visit Us</p>
+            <h2 id="contact-title">Find JOC</h2>
             <p className={styles.lead}>
-              This website is a concept created for {`JOC Juice and Cafe`}. Interested in
-              discussing the website or creating a similar online presence for your business?
-            </p>
-            <p className={styles.disclaimer}>
-              These are temporary proposal contact details, not official JOC contact details.
+              Visit {BRAND.name} at {ADDRESS.line1}, {ADDRESS.line2}.
             </p>
 
             <div className={styles.actions}>
               <a
-                className="btn btn--whatsapp btn--lg"
-                href={WHATSAPP_URL}
+                className="btn btn--primary btn--lg"
+                href={LINKS.maps}
                 target="_blank"
                 rel="noreferrer"
               >
-                <MessageCircle size={19} aria-hidden="true" />
-                Chat on WhatsApp
+                <MapPin size={19} aria-hidden="true" />
+                Get Directions
               </a>
-              <a className="btn btn--onDark btn--lg" href={MAILTO_URL}>
-                <Mail size={19} aria-hidden="true" />
-                Send Email
+              <a className="btn btn--onDark btn--lg" href="#location">
+                <MapPin size={19} aria-hidden="true" />
+                View Location
               </a>
             </div>
           </div>
 
           <div className={styles.card}>
-            <p className={styles.cardLabel}>{CONTACT.label}</p>
-            <p className={styles.cardName}>{CONTACT.name}</p>
+            <p className={styles.cardLabel}>Location</p>
+            <p className={styles.cardName}>{BRAND.name}</p>
 
             <ul className={styles.contacts}>
               <li>
                 <span className={styles.icon} aria-hidden="true">
-                  <Phone size={18} />
+                  <MapPin size={18} />
                 </span>
                 <span className={styles.contactBody}>
-                  <span className={styles.contactLabel}>WhatsApp</span>
+                  <span className={styles.contactLabel}>Address</span>
                   <a
                     className={styles.contactLink}
-                    href={WHATSAPP_URL}
+                    href={LINKS.maps}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    {CONTACT.phoneDisplay}
-                  </a>
-                </span>
-              </li>
-              <li>
-                <span className={styles.icon} aria-hidden="true">
-                  <Mail size={18} />
-                </span>
-                <span className={styles.contactBody}>
-                  <span className={styles.contactLabel}>Email</span>
-                  <a className={styles.contactLink} href={MAILTO_URL}>
-                    {CONTACT.email}
+                    {ADDRESS.line1}, {ADDRESS.line2}
                   </a>
                 </span>
               </li>

@@ -33,28 +33,9 @@
   pointer-events: none;
 }
 
-.wa {
+.map {
   flex: 1;
   padding-block: 0.8rem;
-}
-
-.call,
-.mail {
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  flex: none;
-  border-radius: var(--radius-pill);
-  background: var(--paper-tint);
-  color: var(--green-800);
-  box-shadow: inset 0 0 0 1px var(--line);
-  transition: background-color var(--dur-fast) var(--ease);
-}
-
-.call:hover,
-.mail:hover {
-  background: var(--lime-300);
 }
 
 @media (min-width: 900px) {
