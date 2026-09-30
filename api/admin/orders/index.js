@@ -15,7 +15,8 @@ import { methodGuard, sendError, sendJson } from "../../_lib/http.js";
 import { getStore } from "../../_lib/store.js";
 import { requireAdmin } from "../../_lib/adminAuth.js";
 import { listOrders, orderCounts } from "../../_lib/ordersAdmin.js";
-import { whatsappNumber, emailConfig } from "../../_lib/notify.js";
+import { whatsappNumber } from "../../_lib/notify.js";
+import { emailConfig } from "../../_lib/email.js";
 
 export default async function handler(req, res) {
   if (!methodGuard(req, res, "GET")) return;
@@ -40,7 +41,7 @@ export default async function handler(req, res) {
       notify: {
         whatsappNumber: whatsappNumber(),
         whatsappIsManual: true,
-        email: emailConfig().enabled,
+        email: emailConfig().configured,
       },
       admin: { id: admin.id, email: admin.email },
     });

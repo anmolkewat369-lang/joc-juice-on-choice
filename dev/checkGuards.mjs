@@ -32,6 +32,77 @@ import { orderSummaryText, whatsappLink } from "../api/_lib/notify.js";
 process.env.JOC_ALLOW_MEMORY_STORE = "true";
 delete process.env.DATABASE_URL;
 
+/* --------------------------- Google delivery stub -------------------------- */
+
+/**
+ * Every order now requires a driving-distance check, so the whole suite needs a
+ * maps provider. Rather than weaken the order route for tests, the provider
+ * itself is stubbed: `fetch` below answers the two Google endpoints and delegates
+ * everything else to the real implementation, so the order path exercises its
+ * actual Google code — the request it builds, the fields it reads, the integer
+ * metre comparison — with only the network replaced.
+ *
+ * `maps` is mutable so a check can make the provider report a specific distance,
+ * fail, or find nothing. Reset by `withMaps` around each such check, so no check
+ * can silently depend on the previous one's answer.
+ */
+const maps = {
+  distanceMeters: 4200,
+  /** null to simulate the provider being unreachable or erroring. */
+  routeResponse: null,
+  /** "ZERO_RESULTS" makes the geocoder find nothing. */
+  geocodeStatus: "OK",
+  calls: [],
+};
+
+const googleJson = (body, status = 200) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: async () => body,
+  text: async () => JSON.stringify(body),
+});
+
+const realFetch = globalThis.fetch;
+
+globalThis.fetch = async (input, init = {}) => {
+  const url = String(input?.url ?? input);
+  const isGeocode = url.includes("/maps/api/geocode/json");
+  const isRoute = url.includes("routes.googleapis.com");
+  if (!isGeocode && !isRoute) return realFetch(input, init);
+
+  maps.calls.push({ url, init });
+
+  if (isGeocode) {
+    if (maps.geocodeStatus !== "OK") return googleJson({ status: maps.geocodeStatus });
+    return googleJson({
+      status: "OK",
+      results: [
+        {
+          formatted_address: "Jabalpur, Madhya Pradesh",
+          geometry: { location: { lat: 23.18, lng: 79.99 } },
+        },
+      ],
+    });
+  }
+
+  if (maps.routeResponse) return googleJson(maps.routeResponse);
+  return googleJson({
+    routes: [
+      {
+        distanceMeters: maps.distanceMeters,
+        duration: "600s",
+        status: "OK",
+      },
+    ],
+  });
+};
+
+// A configured store, so the checks exercise the real path rather than the
+// "no coordinates configured" fail-closed branch.
+process.env.GOOGLE_MAPS_API_KEY = "test-google-key";
+process.env.JOC_STORE_LATITUDE = "23.1815";
+process.env.JOC_STORE_LONGITUDE = "79.9864";
+
 const checks = [];
 const check = (name, fn) => checks.push([name, fn]);
 
@@ -567,6 +638,20 @@ check("a Cash on Delivery order places normally", withUpiEnv(async () => {
   assert.equal(res.payload.order.orderStatus, "RECEIVED");
   assert.equal(res.payload.payment, null, "a cash order has no digital payment view");
   assert.ok(res.payload.accessToken, "the owner token is returned exactly once");
+}));
+
+check("a validation failure returns a per-field map the checkout can act on", withUpiEnv(async () => {
+  const res = await placeOrder(checkoutBody("COD", { phone: "123", address: "no" }), "e2e-invalid-1");
+  assert.equal(res.statusCode, 422, JSON.stringify(res.payload));
+  assert.equal(res.payload.error.code, "invalid_checkout");
+  // Field errors and refusal context are different things and travel separately:
+  // the checkout highlights inputs from `errors` and would paste "OUT_OF_RANGE"
+  // onto an input if it were handed `details` instead.
+  assert.ok(res.payload.error.errors, "the field map must be under `errors`");
+  assert.equal(res.payload.error.errors.phone, "Please enter a valid 10-digit mobile number.");
+  assert.ok(res.payload.error.errors.address, "every bad field is reported, not just the first");
+  assert.equal(res.payload.error.details, undefined, "no refusal context on a validation error");
+  assert.ok(res.payload.error.message, "and a human-readable headline alongside it");
 }));
 
 check("a UPI order is created pending, with a server-priced payment view", withUpiEnv(async () => {

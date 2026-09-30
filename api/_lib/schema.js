@@ -1,18 +1,18 @@
 /**
  * Runtime DDL, executed at most once per cold start.
  *
- * Mirrors `db/schema.sql` plus `db/migrations/002_payment_provider_and_admin.sql`
- * and `db/migrations/003_cod_payment_provider.sql` — those files stay the
+ * Mirrors `db/schema.sql` plus `db/migrations/002_payment_provider_and_admin.sql`,
+ * `db/migrations/003_cod_payment_provider.sql` and
+ * `db/migrations/004_delivery_and_notifications.sql` — those files stay the
  * reference for running migrations by hand in the Supabase SQL editor. This
  * copy exists so the API can self-provision on first request during local
  * development and nobody has to open a SQL editor to try ordering. Every
  * statement is idempotent.
  *
- * PRODUCTION MUST SET JOC_AUTO_MIGRATE=false and apply
- * db/migrations/002_payment_provider_and_admin.sql and
- * db/migrations/003_cod_payment_provider.sql once through the Supabase SQL
- * editor. The Supabase *transaction* pooler hands the session between backends,
- * so a multi-statement DDL script must never be run through it.
+ * PRODUCTION MUST SET JOC_AUTO_MIGRATE=false and apply the migrations once
+ * through the Supabase SQL editor. The Supabase *transaction* pooler hands the
+ * session between backends, so a multi-statement DDL script must never be run
+ * through it.
  */
 
 export const ORDERS_TABLE = "joc_orders";
@@ -28,9 +28,16 @@ create table if not exists joc_orders (
   access_hash           text not null,
   customer_name         text not null,
   phone                 text not null,
+  customer_email        text,
   address               text not null,
   landmark              text not null default '',
   special_instructions  text not null default '',
+  delivery_distance_meters integer,
+  delivery_radius_km    numeric(6,2),
+  delivery_eligible     boolean,
+  delivery_outcome      text,
+  delivery_checked_at   timestamptz,
+  tracking_token        text,
   items                 jsonb not null,
   subtotal              integer not null,
   delivery_charge       integer not null,
@@ -52,10 +59,10 @@ create table if not exists joc_orders (
 );
 
 -- ---------------------------------------------------------------------------
--- Upgrade path for a pre-002 / pre-003 database.
+-- Upgrade path for a pre-002 / pre-003 / pre-004 database.
 --
 -- 'create table if not exists' is a no-op when the table already exists, so
--- without this block a database created before migration 002 would silently keep
+-- without this block a database created before a migration would silently keep
 -- the old columns and the old 'ONLINE' payment_method — the API would then
 -- write UPI rows into a table whose CHECK rejects them. These statements mirror
 -- the migrations, in the same deliberate order: add columns, widen the
@@ -66,6 +73,20 @@ alter table joc_orders add column if not exists payment_reference text;
 alter table joc_orders add column if not exists payment_provider text;
 alter table joc_orders add column if not exists payment_verified_at timestamptz;
 alter table joc_orders add column if not exists payment_verified_by text;
+
+-- Migration 004. Nullable and unconstrained on purpose for the same reason as
+-- in the migration: NULL must be able to mean "never verified", so none of these
+-- can have a default that would manufacture a verification.
+--
+-- Column first, constraint second — Postgres will not accept a CHECK that names
+-- a column which does not exist yet.
+alter table joc_orders add column if not exists customer_email text;
+alter table joc_orders add column if not exists delivery_distance_meters integer;
+alter table joc_orders add column if not exists delivery_radius_km numeric(6,2);
+alter table joc_orders add column if not exists delivery_eligible boolean;
+alter table joc_orders add column if not exists delivery_checked_at timestamptz;
+alter table joc_orders add column if not exists delivery_outcome text;
+alter table joc_orders add column if not exists tracking_token text;
 
 -- ---------------------------------------------------------------------------
 -- Widen payment_provider to accept 'cod' FIRST (migration 003).
@@ -190,8 +211,45 @@ create index if not exists joc_orders_payment_idx on joc_orders (payment_status,
 create index if not exists joc_orders_payment_provider_idx on joc_orders (payment_provider);
 create index if not exists joc_orders_payment_reference_idx on joc_orders (payment_reference) where payment_reference is not null;
 create index if not exists joc_orders_phone_idx on joc_orders (phone);
+create index if not exists joc_orders_customer_email_idx on joc_orders (customer_email) where customer_email is not null;
 create index if not exists joc_order_events_order_idx on joc_order_events (order_uuid, created_at desc);
 create index if not exists joc_order_events_created_at_idx on joc_order_events (created_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Notification ledger (migration 004).
+--
+-- The unique constraint is the exactly-once mechanism, so it is part of the
+-- table definition here rather than a separate statement: there is no window in
+-- which the table exists without it, and therefore no window in which two
+-- instances could both believe they own a send.
+-- ---------------------------------------------------------------------------
+create table if not exists joc_notifications (
+  id                bigint generated always as identity primary key,
+  order_uuid        uuid not null references joc_orders (id) on delete cascade,
+  order_ref         text not null,
+  notification_type text not null
+                      check (notification_type in (
+                        'admin_new_order', 'customer_order_received',
+                        'customer_status', 'customer_payment_verified'
+                      )),
+  dedupe_key        text not null,
+  recipient         text not null,
+  provider          text not null default 'resend',
+  status            text not null default 'pending'
+                      check (status in ('pending', 'sent', 'failed', 'skipped')),
+  attempts          integer not null default 0,
+  last_error        text,
+  lease_until       timestamptz not null default now(),
+  sent_at           timestamptz,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  constraint joc_notifications_once unique (order_uuid, notification_type, dedupe_key)
+);
+
+create index if not exists joc_notifications_order_idx
+  on joc_notifications (order_uuid, created_at desc);
+create index if not exists joc_notifications_pending_idx
+  on joc_notifications (lease_until) where status = 'pending';
 
 create or replace function joc_touch_updated_at() returns trigger
   language plpgsql as $$
@@ -208,6 +266,7 @@ create trigger joc_orders_touch
 
 alter table joc_orders enable row level security;
 alter table joc_order_events enable row level security;
+alter table joc_notifications enable row level security;
 
 create table if not exists joc_schema_migrations (
   version     text primary key,
@@ -216,6 +275,8 @@ create table if not exists joc_schema_migrations (
 insert into joc_schema_migrations (version) values ('002_payment_provider_and_admin')
   on conflict (version) do nothing;
 insert into joc_schema_migrations (version) values ('003_cod_payment_provider')
+  on conflict (version) do nothing;
+insert into joc_schema_migrations (version) values ('004_delivery_and_notifications')
   on conflict (version) do nothing;
 `;
 

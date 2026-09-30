@@ -26,6 +26,8 @@ const ROUTES = [
   { match: /^\/orders$/, file: "orders/index.js" },
   { match: /^\/orders\/utr$/, file: "orders/utr.js" },
   { match: /^\/orders\/[^/]+$/, file: "orders/[orderId].js" },
+  { match: /^\/delivery\/check$/, file: "delivery/check.js" },
+  { match: /^\/delivery\/config$/, file: "delivery/config.js" },
   { match: /^\/payments\/methods$/, file: "payments/methods.js" },
   { match: /^\/payments\/create$/, file: "payments/create.js" },
   { match: /^\/payments\/verify$/, file: "payments/verify.js" },

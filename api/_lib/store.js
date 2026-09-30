@@ -43,6 +43,20 @@ const isMigrationOff = () =>
 export const MAX_PAGE_SIZE = 100;
 export const DEFAULT_PAGE_SIZE = 20;
 
+/**
+ * How many times one notification may be attempted before it is left alone.
+ *
+ * Bounded on purpose. An unbounded retry turns a misconfigured Resend key into a
+ * per-status-change attempt storm against an API that will reject every one of
+ * them, and a customer flipping their order through six statuses would multiply
+ * that. Three is enough to ride out a transient network blip; after that the row
+ * is an operator problem, which is where it belongs.
+ */
+export const NOTIFICATION_MAX_ATTEMPTS = 3;
+
+/** How long a claimed-but-unresolved notification stays owned by its claimer. */
+export const NOTIFICATION_LEASE_SECONDS = 60;
+
 /** Clamp client-supplied pagination to something sane. */
 export function pageBounds({ page, pageSize } = {}) {
   const size = Math.min(
@@ -95,10 +109,14 @@ function createPostgresStore() {
     async createOrder(record, idempotencyKey) {
       const { rows } = await run(
         `insert into joc_orders (
-           idempotency_key, access_hash, customer_name, phone, address, landmark,
-           special_instructions, items, subtotal, delivery_charge, total, currency,
+           idempotency_key, access_hash, customer_name, phone, customer_email,
+           address, landmark, special_instructions,
+           delivery_distance_meters, delivery_radius_km, delivery_eligible,
+           delivery_outcome, delivery_checked_at,
+           tracking_token,
+           items, subtotal, delivery_charge, total, currency,
            payment_method, payment_status, order_status, payment_provider
-         ) values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14,$15,$16)
+         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18,$19,$20,$21,$22,$23)
          on conflict (idempotency_key) do nothing
          returning *`,
         [
@@ -106,9 +124,19 @@ function createPostgresStore() {
           hashAccessToken(record.accessToken),
           record.customerName,
           record.phone,
+          record.customerEmail ?? null,
           record.address,
           record.landmark,
           record.specialInstructions,
+          // The verification the caller already performed. Stored so an admin can
+          // see that an address was checked and how far it measured, and so a
+          // later change to the radius cannot silently reinterpret an old order.
+          record.delivery?.distanceMeters ?? null,
+          record.delivery?.radiusKm ?? null,
+          record.delivery?.eligible ?? null,
+          record.delivery?.outcome ?? null,
+          record.delivery?.checkedAt ?? null,
+          record.trackingToken ?? null,
           JSON.stringify(record.items),
           record.subtotal,
           record.deliveryCharge,
@@ -148,6 +176,24 @@ function createPostgresStore() {
       const { rows } = await run(`select * from joc_orders where order_id = $1 limit 1`, [
         orderId,
       ]);
+      return rows[0] ?? null;
+    },
+
+    /**
+     * Look up an order by its idempotency key, before any expensive work.
+     *
+     * The order route calls this FIRST, before the delivery check. A retry of a
+     * request that already succeeded is a customer refreshing the page or a
+     * network re-sending — neither is a new order, and neither should cost two
+     * Google calls or, worse, be refused because the address has drifted out of
+     * range since the order was placed. A customer's already-placed order is
+     * never invalidated by a later check of the same address.
+     */
+    async findByIdempotencyKey(idempotencyKey) {
+      const { rows } = await run(
+        `select * from joc_orders where idempotency_key = $1 limit 1`,
+        [idempotencyKey],
+      );
       return rows[0] ?? null;
     },
 
@@ -324,6 +370,108 @@ function createPostgresStore() {
       return rows[0] ?? null;
     },
 
+    /* ---------------------------- notifications ----------------------------- */
+
+    /**
+     * Claim the right to send one notification, or report that someone else
+     * already has.
+     *
+     * The insert IS the lock. The unique constraint on
+     * (order_uuid, notification_type, dedupe_key) means exactly one caller can
+     * win this insert; every concurrent loser gets zero rows back and is told
+     * not to send. That is what makes a duplicated order request, a second
+     * serverless instance, or an admin page refresh unable to produce a second
+     * email — without a lock table, a distributed mutex, or a queue.
+     *
+     * A previously FAILED row is taken over rather than left to block forever, so
+     * a transport blip does not permanently silence a notification. Retries are
+     * bounded by MAX_ATTEMPTS, so a genuinely broken configuration produces a
+     * small, bounded number of attempts rather than a retry storm.
+     *
+     * A 'sent' or 'skipped' row is never taken over. 'skipped' means the decision
+     * was deliberate — the customer gave no email address — and re-asking on every
+     * status change would be pure noise.
+     */
+    async claimNotification({
+      orderUuid,
+      orderRef,
+      type,
+      dedupeKey,
+      recipient,
+      leaseSeconds = 60,
+    }) {
+      const { rows } = await run(
+        `insert into joc_notifications (
+           order_uuid, order_ref, notification_type, dedupe_key, recipient, lease_until, attempts
+         ) values ($1,$2,$3,$4,$5, now() + make_interval(secs => $6), 1)
+         on conflict (order_uuid, notification_type, dedupe_key) do nothing
+         returning *`,
+        [orderUuid, orderRef, type, dedupeKey, recipient, leaseSeconds],
+      );
+      if (rows.length > 0) return { claimed: true, notification: rows[0] };
+
+      // Conflict. Either it is already finished, it is in flight, or a previous
+      // attempt failed and may be retried — decided in one statement so two
+      // racing retries cannot both take over.
+      const taken = await run(
+        `update joc_notifications
+            set status       = 'pending',
+                attempts     = attempts + 1,
+                last_error   = null,
+                lease_until  = now() + make_interval(secs => $5),
+                updated_at   = now()
+          where id = (
+                  select id from joc_notifications
+                   where order_uuid = $1
+                     and notification_type = $2
+                     and dedupe_key = $3
+                     and (
+                       status = 'failed'
+                       or (status = 'pending' and lease_until < now())
+                     )
+                     and attempts < $4
+                 )
+          returning *`,
+        [orderUuid, type, dedupeKey, NOTIFICATION_MAX_ATTEMPTS, leaseSeconds],
+      );
+      if (taken.rows.length > 0) return { claimed: true, notification: taken.rows[0] };
+
+      const current = await run(
+        `select status from joc_notifications
+          where order_uuid = $1 and notification_type = $2 and dedupe_key = $3 limit 1`,
+        [orderUuid, type, dedupeKey],
+      );
+      return { claimed: false, status: current.rows[0]?.status ?? "sent" };
+    },
+
+    /** Resolve a claim. Only a row this caller owns can be resolved. */
+    async completeNotification(id, status, error = null) {
+      const { rows } = await run(
+        `update joc_notifications
+            set status     = $2,
+                last_error = $3,
+                sent_at    = case when $2 = 'sent' then now() else sent_at end,
+                updated_at = now()
+          where id = $1 and status = 'pending'
+          returning *`,
+        [id, status, error === null ? null : String(error).slice(0, 500)],
+      );
+      return rows[0] ?? null;
+    },
+
+    /** Audit view for the admin drawer: what has actually gone out. */
+    async listNotifications(orderUuid) {
+      const { rows } = await run(
+        `select id, notification_type, dedupe_key, recipient, status, attempts,
+                sent_at, created_at
+           from joc_notifications
+          where order_uuid = $1
+          order by created_at, id`,
+        [orderUuid],
+      );
+      return rows;
+    },
+
     /**
      * Guarded admin write. Only the columns an admin action is allowed to
      * change are writable, and PAID is only reachable together with
@@ -381,9 +529,16 @@ const toRow = (record) => ({
   access_hash: hashAccessToken(record.accessToken),
   customer_name: record.customerName,
   phone: record.phone,
+  customer_email: record.customerEmail ?? null,
   address: record.address,
   landmark: record.landmark,
   special_instructions: record.specialInstructions,
+  delivery_distance_meters: record.delivery?.distanceMeters ?? null,
+  delivery_radius_km: record.delivery?.radiusKm ?? null,
+  delivery_eligible: record.delivery?.eligible ?? null,
+  delivery_outcome: record.delivery?.outcome ?? null,
+  delivery_checked_at: record.delivery?.checkedAt ?? null,
+  tracking_token: record.trackingToken ?? null,
   items: record.items,
   subtotal: record.subtotal,
   delivery_charge: record.deliveryCharge,
@@ -423,7 +578,81 @@ function createMemoryStore() {
   const orders = new Map(); // orderId -> row
   const byKey = new Map(); // idempotencyKey -> orderId
   const events = []; // append-only audit trail
+  const notifications = new Map(); // id -> row
   let sequence = 0;
+  let notificationSequence = 0;
+
+  /**
+   * The same claim/complete contract as the Postgres driver, against a Map.
+   *
+   * Mirrored rather than approximated so the local demo exercises the real code
+   * path in api/_lib/notify.js. Single-threaded JS makes the "conflicting" branch
+   * unreachable here, which is exactly the point: the memory driver can only ever
+   * take the winning branch, so a bug in the loser branch cannot hide behind a
+   * green local run.
+   */
+  const notificationKey = (orderUuid, type, dedupeKey) => `${orderUuid}|${type}|${dedupeKey}`;
+
+  const claimNotification = async ({
+    orderUuid,
+    orderRef,
+    type,
+    dedupeKey,
+    recipient,
+    leaseSeconds = NOTIFICATION_LEASE_SECONDS,
+  }) => {
+    const key = notificationKey(orderUuid, type, dedupeKey);
+    const existing = notifications.get(key);
+    const now = Date.now();
+
+    if (existing) {
+      const leaseExpired =
+        existing.status === "pending" &&
+        new Date(existing.lease_until).getTime() <= now;
+      const retryable =
+        existing.status === "failed" || leaseExpired;
+      if (!retryable || existing.attempts >= NOTIFICATION_MAX_ATTEMPTS) {
+        return { claimed: false, status: existing.status };
+      }
+      existing.status = "pending";
+      existing.attempts += 1;
+      existing.last_error = null;
+      existing.lease_until = new Date(now + leaseSeconds * 1000).toISOString();
+      return { claimed: true, notification: existing };
+    }
+
+    notificationSequence += 1;
+    const row = {
+      id: notificationSequence,
+      order_uuid: orderUuid,
+      order_ref: orderRef,
+      notification_type: type,
+      dedupe_key: dedupeKey,
+      recipient,
+      provider: "resend",
+      status: "pending",
+      attempts: 1,
+      last_error: null,
+      lease_until: new Date(now + leaseSeconds * 1000).toISOString(),
+      sent_at: null,
+      created_at: new Date(now).toISOString(),
+      updated_at: new Date(now).toISOString(),
+    };
+    notifications.set(key, row);
+    return { claimed: true, notification: row };
+  };
+
+  const completeNotification = async (id, status, error = null) => {
+    for (const row of notifications.values()) {
+      if (row.id !== id || row.status !== "pending") continue;
+      row.status = status;
+      row.last_error = error === null ? null : String(error).slice(0, 500);
+      if (status === "sent") row.sent_at = new Date().toISOString();
+      row.updated_at = new Date().toISOString();
+      return row;
+    }
+    return null;
+  };
 
   const recordEvent = (entry) => {
     const row = {
@@ -463,6 +692,11 @@ function createMemoryStore() {
 
     async getOrder(orderId) {
       return orders.get(orderId) ?? null;
+    },
+
+    async findByIdempotencyKey(idempotencyKey) {
+      const orderId = byKey.get(idempotencyKey);
+      return orderId ? (orders.get(orderId) ?? null) : null;
     },
 
     async setRazorpayOrderId(orderId, razorpayOrderId) {
@@ -552,6 +786,15 @@ function createMemoryStore() {
       return recordEvent(entry);
     },
 
+    claimNotification,
+    completeNotification,
+
+    async listNotifications(orderUuid) {
+      return [...notifications.values()]
+        .filter((row) => row.order_uuid === orderUuid)
+        .sort((a, b) => a.id - b.id);
+    },
+
     async adminUpdateOrder(
       orderId,
       {
@@ -636,15 +879,46 @@ export function _resetStoreCache() {
 
 /* --------------------------------- mapping -------------------------------- */
 
+/**
+ * Row -> camelCase.
+ *
+ * `tracking_token` is DELIBERATELY ABSENT. It is the order secret in plaintext,
+ * kept only so an emailed tracking link can be built hours later. It is not part
+ * of the camelCase shape at all, which means it cannot leak through
+ * `toPublicOrder`, `toAdminOrder`, a spread, or any future field that forgets to
+ * strip it — the one function that reads the column is the notification code,
+ * which needs it for exactly one purpose. Omitting it here is the strongest form
+ * of the guarantee: there is no list to maintain.
+ */
 const toCamel = (row) => ({
   id: row.id,
   orderId: row.order_id,
   orderSeq: Number(row.order_seq),
   customerName: row.customer_name,
   phone: row.phone,
+  customerEmail: row.customer_email ?? null,
   address: row.address,
   landmark: row.landmark,
   specialInstructions: row.special_instructions,
+  /**
+   * The verification the server performed before creating this order.
+   *
+   * Grouped and always present, so the UI never has to test five flat fields to
+   * learn whether an address was checked. `verified: false` with nulls is the
+   * honest reading for an order placed before the rule existed.
+   */
+  delivery: {
+    verified: row.delivery_checked_at !== null && row.delivery_checked_at !== undefined,
+    outcome: row.delivery_outcome ?? null,
+    eligible: row.delivery_eligible ?? null,
+    distanceMeters: row.delivery_distance_meters ?? null,
+    radiusKm: row.delivery_radius_km === null || row.delivery_radius_km === undefined
+      ? null
+      : Number(row.delivery_radius_km),
+    checkedAt: row.delivery_checked_at
+      ? new Date(row.delivery_checked_at).toISOString()
+      : null,
+  },
   items: typeof row.items === "string" ? JSON.parse(row.items) : row.items,
   subtotal: row.subtotal,
   deliveryCharge: row.delivery_charge,
@@ -660,6 +934,16 @@ const toCamel = (row) => ({
   createdAt: new Date(row.created_at).toISOString(),
   updatedAt: new Date(row.updated_at ?? row.created_at).toISOString(),
 });
+
+/**
+ * The one sanctioned reader of `tracking_token`.
+ *
+ * Server-side only, and it returns the token to nobody but the notification
+ * composer. There is deliberately no public or admin shape that reaches it — see
+ * toCamel above. Rotation is the revocation story: overwrite this column and
+ * every tracking link sent so far stops working at once.
+ */
+export const readTrackingToken = (row) => row?.tracking_token ?? null;
 
 /**
  * Shape sent to the browser. The order secret and the raw hash are stripped —
@@ -725,6 +1009,33 @@ export const toAdminEvent = (row) => ({
   metadata: typeof row.metadata === "string" ? JSON.parse(row.metadata) : (row.metadata ?? {}),
   createdAt: new Date(row.created_at).toISOString(),
 });
+
+/**
+ * Notification ledger rows for the admin drawer.
+ *
+ * The recipient is masked, and deliberately not left as-is: an admin looking at
+ * "what was sent for this order" needs to know a message went to the customer's
+ * address, not to read it. The masking makes the common case obvious while
+ * keeping the column a phone number, so a dashboard full of e-mail addresses is
+ * not a new copy of the customer list.
+ */
+export const toAdminNotification = (row) => ({
+  id: Number(row.id),
+  type: row.notification_type,
+  dedupeKey: row.dedupe_key,
+  recipient: maskEmail(row.recipient),
+  status: row.status,
+  attempts: Number(row.attempts ?? 0),
+  sentAt: row.sent_at ? new Date(row.sent_at).toISOString() : null,
+  createdAt: new Date(row.created_at).toISOString(),
+});
+
+/** e.g. `r•••••@gmail.com` — enough to recognise, not enough to harvest. */
+const maskEmail = (value) => {
+  const [local, domain] = String(value ?? "").split("@");
+  if (!domain) return "—";
+  return `${local.slice(0, 1)}•••••@${domain}`;
+};
 
 export const ORDER_DEFAULTS = {
   currency: CURRENCY,

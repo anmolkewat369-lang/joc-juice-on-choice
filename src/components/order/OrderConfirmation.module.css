@@ -153,6 +153,126 @@
   color: var(--ink-400);
 }
 
+/* The figure that actually matters, lifted out of the fine print above it and
+   matching the server-priced total. */
+.itemTotal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+}
+
+.itemTotal strong {
+  font-family: var(--font-head);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--green-700);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------- Timeline -------------------------------- */
+
+.timeline {
+  width: 100%;
+}
+
+.timeline h2 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 0.6rem;
+}
+
+.timeline ol {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  position: relative;
+  /* Enough vertical room for the connector line between two dots. */
+  padding-bottom: 0.85rem;
+  font-size: var(--fs-sm);
+}
+
+/* The connector: a 2px line from this dot down to the next, drawn on the li so it
+   stops short of the last row rather than dangling under it. */
+.timeline li:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 24px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--line);
+}
+
+.stepDot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--paper-tint);
+  color: var(--ink-400);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.stepLabel {
+  color: var(--ink-400);
+}
+
+/* Done: green dot, and a green connector where one is drawn. */
+.stepDone .stepDot {
+  background: var(--lime-300);
+  color: var(--green-800);
+  box-shadow: none;
+}
+
+.stepDone .stepLabel {
+  color: var(--ink-600);
+}
+
+.stepDone:not(:last-child)::before {
+  background: var(--lime-300);
+}
+
+/* Current: the only row allowed to shout. */
+.stepCurrent .stepDot {
+  background: var(--ink-900);
+  color: var(--paper);
+  box-shadow: none;
+}
+
+.stepCurrent .stepLabel {
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.timelineCancelled {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: var(--fs-sm);
+  color: var(--berry-600);
+}
+
 /* -------------------------------- Address -------------------------------- */
 
 .address {
@@ -179,6 +299,21 @@
   align-items: center;
   gap: 0.35rem;
   font-variant-numeric: tabular-nums;
+}
+
+/* The verified driving distance, shown the same way as the phone number: one
+   quiet line of fact, not a callout. */
+.distance {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  font-size: var(--fs-xs);
+  color: var(--ink-400);
+}
+
+.distance svg {
+  flex: none;
 }
 
 .instructions {

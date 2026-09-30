@@ -10,13 +10,26 @@ const CORS = {
   "Access-Control-Max-Age": "86400",
 };
 
-/** Customer-safe message. Internal detail goes to the log, never to the browser. */
+/**
+ * Customer-safe message. Internal detail goes to the log, never to the browser.
+ *
+ * Two narrow, explicitly safe exceptions, and they are kept apart on purpose:
+ *
+ *   * `details` — context a client genuinely needs to react to, but which is NOT
+ *     per-field: which delivery outcome came back, what the radius is. Only ever
+ *     serialised for 4xx, because a 5xx here means the server is confused and its
+ *     own explanation is not something to hand out.
+ *   * `errors`  — a field name -> message map, which the checkout uses to mark the
+ *     exact inputs a customer got wrong. Never used for anything else.
+ */
 export class ApiError extends Error {
-  constructor(status, message, code = "request_failed") {
+  constructor(status, message, code = "request_failed", details = null, errors = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.details = details;
+    this.errors = errors;
   }
 }
 
@@ -55,7 +68,16 @@ export function sendError(res, error) {
   }
 
   Object.entries(CORS).forEach(([key, value]) => res.setHeader(key, value));
-  res.status(status).json({ error: { code, message } });
+  res.status(status).json({
+    error: {
+      code,
+      message,
+      // Client-actionable payload only, and only for a considered refusal. A 5xx
+      // never carries any.
+      ...(status < 500 && error?.details ? { details: error.details } : {}),
+      ...(status < 500 && error?.errors ? { errors: error.errors } : {}),
+    },
+  });
 }
 
 /** Parse a JSON body defensively — an empty or malformed body is not a crash. */

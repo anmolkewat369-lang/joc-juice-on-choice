@@ -9,6 +9,8 @@ import {
   ExternalLink,
   Loader2,
   LogOut,
+  Mail,
+  MapPin,
   RefreshCw,
   Search,
   X,
@@ -20,6 +22,7 @@ import {
   PAYMENT_STATUS,
   PAYMENT_STATUS_LABELS,
 } from "../../shared/ordering.js";
+import { formatDistanceKm } from "../../shared/delivery.js";
 import { actOnOrder, getOrder, listOrders } from "./api.js";
 import NewOrderAlert from "./NewOrderAlert.jsx";
 import { formatPrice, formatDateTime } from "./format.js";
@@ -40,6 +43,7 @@ const INITIAL_FILTER = "all";
 /** Stable empty values, so referential equality holds while the first load runs. */
 const EMPTY = [];
 const EMPTY_COUNTS = {};
+const EMPTY_SET = new Set();
 
 export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSessionExpired }) {
   const [listing, setListing] = useState(null);
@@ -51,7 +55,27 @@ export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSes
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [seenIds, setSeenIds] = useState(() => new Set());
+  /**
+   * Orders that arrived while this dashboard was open and have not been opened.
+   *
+   * Separate from `seenIds` on purpose. `seenIds` exists so the sound does not
+   * replay for history; "unseen" is a question about the human in front of the
+   * screen. Merging them would mean the badge cleared itself the moment the poll
+   * noticed an order — the exact moment the admin most needs to be told.
+   */
+  const [unreadIds, setUnreadIds] = useState(() => new Set());
   const [soundOn, setSoundOn] = useState(false);
+
+  /**
+   * A ref mirror of seenIds, so the polling interval and the fetch itself never
+   * close over a stale set. Declared before `load` and written directly in its
+   * success path, because the poll may run before React has committed the state
+   * update from a load that only just finished.
+   */
+  const seenIdsRef = useRef(seenIds);
+  useEffect(() => {
+    seenIdsRef.current = seenIds;
+  }, [seenIds]);
 
   const notifyRef = useRef(null);
 
@@ -76,12 +100,18 @@ export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSes
         });
         setListing(data);
         setError(null);
-        // First successful load defines the baseline; only later orders notify,
-        // so opening the dashboard does not fire a burst of alerts for history.
-        setSeenIds((previous) => {
-          if (previous.size > 0) return previous;
-          return new Set(data.orders.map((order) => order.orderId));
-        });
+        // Anything the admin has been shown is now "seen". Seeding on every
+        // deliberate load — not only the first — is what stops a filter or page
+        // change from making the next poll alert about rows already on screen.
+        // A quiet load is the poll itself: seeding there would mark a genuinely
+        // new order as seen before the tick could announce it, so it is skipped
+        // and the tick does the adding.
+        if (!quiet) {
+          const next = new Set(seenIdsRef.current);
+          for (const order of data.orders) next.add(order.orderId);
+          seenIdsRef.current = next;
+          setSeenIds(next);
+        }
         return data;
       } catch (caught) {
         if (caught.status === 401) {
@@ -119,22 +149,15 @@ export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSes
     setFilter(next);
     setPage(1);
     load({ filter: next, page: 1 });
+    // Choosing to look at the new-orders list IS the acknowledgement, so the
+    // badge does not linger over a view that already shows them.
+    if (next === "new") setUnreadIds(EMPTY_SET);
   };
 
   const goToPage = (next) => {
     setPage(next);
     load({ filter, page: next });
   };
-
-  /**
-   * A ref mirror of seenIds, so the polling interval never closes over a stale
-   * set. Declared and updated before the effect that reads it, because an effect
-   * must not modify a value it also depends on.
-   */
-  const seenIdsRef = useRef(seenIds);
-  useEffect(() => {
-    seenIdsRef.current = seenIds;
-  }, [seenIds]);
 
   /* -------------------------------- polling ------------------------------- */
 
@@ -150,6 +173,11 @@ export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSes
         for (const order of fresh) next.add(order.orderId);
         seenIdsRef.current = next;
         setSeenIds(next);
+        setUnreadIds((previous) => {
+          const merged = new Set(previous);
+          for (const order of fresh) merged.add(order.orderId);
+          return merged.size === previous.size ? previous : merged;
+        });
         notifyRef.current?.announce(fresh);
       }
     };
@@ -193,9 +221,17 @@ export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSes
     (order) => order.paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_REQUIRED,
   ).length;
 
+  const unreadCount = unreadIds.size;
+
   /* -------------------------------- actions ------------------------------- */
 
   const openOrder = async (orderId) => {
+    setUnreadIds((previous) => {
+      if (!previous.has(orderId)) return previous;
+      const next = new Set(previous);
+      next.delete(orderId);
+      return next;
+    });
     try {
       const detail = await getOrder(orderId);
       setSelected(detail);
@@ -209,7 +245,25 @@ export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSes
     <div className={styles.page}>
       <header className={styles.header}>
         <div>
-          <h1 className={styles.title}>JOC Orders</h1>
+          <div className={styles.titleRow}>
+            <h1 className={styles.title}>JOC Orders</h1>
+            {/*
+              Counting orders the admin has not opened yet, using the poll that
+              already runs — this badge costs no extra request. Clicking it goes
+              to the New filter, which is where those orders can be worked.
+            */}
+            {unreadCount > 0 ? (
+              <button
+                type="button"
+                className={styles.unreadBadge}
+                onClick={() => applyFilter("new")}
+                title={`${unreadCount} new order${unreadCount === 1 ? "" : "s"}`}
+              >
+                <Bell size={13} aria-hidden="true" />
+                {unreadCount} new
+              </button>
+            ) : null}
+          </div>
           <p className={styles.muted}>
             Signed in as {admin?.email}
             {needsAttention > 0 ? (
@@ -456,10 +510,23 @@ const COUNTS_KEYS = {
   cancelled: "Cancelled",
 };
 
+/**
+ * Ledger types, spelled the way an admin reads them.
+ *
+ * The stored values are machine tokens and are stable forever; these are free to
+ * be reworded, so the dashboard never renders a raw `customer_status`.
+ */
+const NOTIFICATION_LABELS = {
+  admin_new_order: "New order alert",
+  customer_order_received: "Order received confirmation",
+  customer_status: "Status update",
+  customer_payment_verified: "Payment confirmed",
+};
+
 /* --------------------------------- drawer --------------------------------- */
 
 function OrderDrawer({ detail, onClose, onAction }) {
-  const { order, events, verification, whatsapp } = detail;
+  const { order, events, notifications, verification, whatsapp } = detail;
   const [busy, setBusy] = useState(null);
   const [note, setNote] = useState("");
   const [localError, setLocalError] = useState(null);
@@ -526,6 +593,12 @@ function OrderDrawer({ detail, onClose, onAction }) {
             <strong>{order.customerName}</strong>
             <br />
             {order.phone}
+            {order.customerEmail ? (
+              <>
+                <br />
+                {order.customerEmail}
+              </>
+            ) : null}
             <br />
             {order.address}
             {order.landmark ? (
@@ -537,6 +610,30 @@ function OrderDrawer({ detail, onClose, onAction }) {
           </p>
           {order.specialInstructions ? (
             <p className={styles.subtle}>Note for us: {order.specialInstructions}</p>
+          ) : null}
+        </section>
+
+        {/*
+          The road distance the SERVER measured, not the one the customer was
+          shown at checkout. An admin preparing a run needs the figure that decided
+          the order was allowed, and needs to know when it is missing rather than
+          seeing a blank field. Orders placed before the rule existed land here.
+        */}
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>Delivery check</h3>
+          {order.delivery?.verified ? (
+            <p>
+              <MapPin size={15} aria-hidden="true" /> {formatDistanceKm(order.delivery.distanceMeters)}{" "}
+              by road
+              {order.delivery.eligible === false ? " · outside the area" : ""}
+            </p>
+          ) : (
+            <p className={styles.subtle}>
+              Not verified — this order was placed before the delivery-area check existed.
+            </p>
+          )}
+          {order.delivery?.checkedAt ? (
+            <p className={styles.subtle}>Checked {formatDateTime(order.delivery.checkedAt)}</p>
           ) : null}
         </section>
 
@@ -654,6 +751,34 @@ function OrderDrawer({ detail, onClose, onAction }) {
                 </button>
               ))}
             </div>
+          )}
+        </section>
+
+        {/*
+          The send ledger. Present because the most common support question about
+          an order is "did they get the message?", and the honest answer needs to be
+          readable here. A row that says `failed` is the one worth acting on.
+        */}
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>
+            <Mail size={15} aria-hidden="true" /> Notifications
+          </h3>
+          {!notifications || notifications.length === 0 ? (
+            <p className={styles.subtle}>No messages were sent for this order.</p>
+          ) : (
+            <ol className={styles.timeline}>
+              {notifications.map((notification) => (
+                <li key={notification.id}>
+                  <span className={styles.timelineType}>{NOTIFICATION_LABELS[notification.type] ?? notification.type}</span>
+                  <span className={styles.subtle}>
+                    {notification.status === "sent"
+                      ? `sent to ${notification.recipient} · ${formatDateTime(notification.sentAt ?? notification.createdAt)}`
+                      : `${notification.status} · ${notification.recipient} · ${formatDateTime(notification.createdAt)}`}
+                    {notification.attempts > 1 ? ` · ${notification.attempts} attempts` : ""}
+                  </span>
+                </li>
+              ))}
+            </ol>
           )}
         </section>
 

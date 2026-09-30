@@ -19,6 +19,39 @@
   font-weight: 700;
 }
 
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/*
+ * Unread-order marker. Deliberately quieter than the payment-verification alert
+ * in the line below it: a new order is good news that flows continuously through
+ * the day, whereas an unverified UTR is money that is sitting still.
+ */
+.unreadBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--green-700);
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.unreadBadge:hover {
+  background: var(--green-800);
+}
+
 .muted {
   display: inline-flex;
   align-items: center;

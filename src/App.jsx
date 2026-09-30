@@ -46,8 +46,15 @@ function Ordering({ route, placed, onPlaced, onSettled }) {
   if (route.name === ROUTES.ORDER) {
     return (
       <OrderConfirmation
+        /* Keyed on the id alone, NOT on the token: re-keying on the token would
+           unmount and remount the screen on every poll that changed nothing, and
+           would throw away the loaded order. */
         key={route.orderId}
         orderId={route.orderId}
+        /* The secret from an emailed `#/order/<id>?t=<token>` link. Read from the
+           fragment, which never reaches a server log. Absent for an order opened
+           on the device that placed it — sessionStorage already has the token. */
+        token={route.token}
         initialOutcome={placed.outcome}
         storageNotice={placed.notice}
         onSettled={onSettled}

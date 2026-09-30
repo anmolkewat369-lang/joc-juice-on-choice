@@ -4,7 +4,7 @@
 -- Target: Supabase Postgres (or any Postgres). Run once in the Supabase SQL
 -- editor, or via `psql "$DATABASE_URL" -f db/schema.sql`.
 --
--- This is the CURRENT shape, as of migration 003. It is safe to run on a fresh
+-- This is the CURRENT shape, as of migration 004. It is safe to run on a fresh
 -- database. On an existing database, run the migrations in db/migrations/
 -- instead — they are additive and preserve your data, whereas this file's
 -- `create table if not exists` would leave an older table's columns and CHECK
@@ -20,7 +20,17 @@
 --                   creating a second one.
 --   * `access_hash` SHA-256 of a per-order secret. The customer proves they own
 --                   the order with the secret; the address and phone are never
---                   exposed to someone who only guesses an order id.
+--                   exposed to someone who only guesses an order id. This is the
+--                   ONLY authorisation path for an order lookup.
+--   * `tracking_token` the same secret in plaintext, used for one thing only:
+--                   building the tracking link in an emailed notification hours
+--                   after the order was placed, when a hash can no longer
+--                   reproduce the token. Never returned by any API route.
+--   * `customer_email` optional. NULL is a normal value, not a missing one.
+--   * `delivery_*` the record that the server measured the address against the
+--                   delivery radius before creating the order. NULL on orders
+--                   placed before the rule existed, which is the truthful
+--                   reading — see db/migrations/004_delivery_and_notifications.sql.
 --   * `payment_method` is what the customer chose (COD / UPI).
 --                   `payment_provider` is which rail settles it: `cod` for cash
 --                   on delivery, `manual_upi` or `razorpay` for a digital
@@ -44,9 +54,28 @@ create table if not exists joc_orders (
   -- Customer & delivery. Only what checkout actually collects.
   customer_name       text not null,
   phone               text not null,
+  -- Optional. Used for order updates and the tracking link only.
+  customer_email      text,
   address             text not null,
   landmark            text not null default '',
   special_instructions text not null default '',
+
+  -- The delivery verification the server performed before creating the order.
+  -- NULL across this whole group means "never verified", which is exactly what
+  -- is true of every order placed before migration 004.
+  delivery_distance_meters integer,
+  delivery_radius_km   numeric(6,2),
+  delivery_eligible    boolean,
+  delivery_outcome     text
+                         check (delivery_outcome is null or delivery_outcome in (
+                           'AVAILABLE', 'OUT_OF_RANGE', 'ADDRESS_NOT_FOUND',
+                           'ADDRESS_AMBIGUOUS', 'CHECK_UNAVAILABLE', 'NOT_CONFIGURED'
+                         )),
+  delivery_checked_at  timestamptz,
+
+  -- Plaintext copy of the order secret, for composing emailed tracking links.
+  -- Never selected by any customer- or admin-facing query.
+  tracking_token      text,
 
   -- Items are stored as jsonb: [{ id, name, price, qty, lineTotal }]
   -- with name/price snapshotted from the trusted menu at order time so historic
@@ -100,6 +129,10 @@ create index if not exists joc_orders_payment_provider_idx on joc_orders (paymen
 create index if not exists joc_orders_payment_reference_idx
   on joc_orders (payment_reference) where payment_reference is not null;
 create index if not exists joc_orders_phone_idx on joc_orders (phone);
+-- Only ever a lookup aid for "orders with no email on file"; never used to
+-- select customer-facing payloads.
+create index if not exists joc_orders_customer_email_idx
+  on joc_orders (customer_email) where customer_email is not null;
 
 -- ---------------------------------------------------------------------------
 -- Order event log — an append-only audit trail of every state change.
@@ -128,6 +161,46 @@ create index if not exists joc_order_events_order_idx
 create index if not exists joc_order_events_created_at_idx
   on joc_order_events (created_at desc);
 
+-- ---------------------------------------------------------------------------
+-- Notification ledger — the exactly-once record for every outbound email.
+--
+-- One row per notification that may have been sent. The UNIQUE constraint is
+-- the mechanism, not a formality: a send is claimed by INSERTing, so a second
+-- concurrent claim of the same (order, type, dedupe_key) conflicts and the loser
+-- of the race never sends. `status` distinguishes "we are sending it" from "we
+-- sent it" from "we decided not to", and `lease_until` makes a claim left behind
+-- by a killed instance reclaimable instead of silently lost.
+--
+-- Nothing in the notification path can affect whether an order succeeds.
+-- ---------------------------------------------------------------------------
+create table if not exists joc_notifications (
+  id                bigint generated always as identity primary key,
+  order_uuid        uuid not null references joc_orders (id) on delete cascade,
+  order_ref         text not null,
+  notification_type text not null
+                      check (notification_type in (
+                        'admin_new_order', 'customer_order_received',
+                        'customer_status', 'customer_payment_verified'
+                      )),
+  dedupe_key        text not null,
+  recipient         text not null,
+  provider          text not null default 'resend',
+  status            text not null default 'pending'
+                      check (status in ('pending', 'sent', 'failed', 'skipped')),
+  attempts          integer not null default 0,
+  last_error        text,
+  lease_until       timestamptz not null default now(),
+  sent_at           timestamptz,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  constraint joc_notifications_once unique (order_uuid, notification_type, dedupe_key)
+);
+
+create index if not exists joc_notifications_order_idx
+  on joc_notifications (order_uuid, created_at desc);
+create index if not exists joc_notifications_pending_idx
+  on joc_notifications (lease_until) where status = 'pending';
+
 -- ---------------------------------------------------------------------
 -- Keeps updated_at honest without the application remembering to do it.
 -- ---------------------------------------------------------------------
@@ -154,3 +227,4 @@ create trigger joc_orders_touch
 -- ---------------------------------------------------------------------
 alter table joc_orders enable row level security;
 alter table joc_order_events enable row level security;
+alter table joc_notifications enable row level security;

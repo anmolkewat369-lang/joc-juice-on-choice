@@ -49,7 +49,25 @@ export const LIMITS = {
   landmark: 80,
   instructions: 300,
   phone: 15,
+  /**
+   * 254 is the longest address SMTP will accept. It is a cap on what we are
+   * willing to store and mail, not a claim that every address under it is real.
+   */
+  email: 254,
 };
+
+/**
+ * Email is OPTIONAL, and that is a deliberate business decision.
+ *
+ * JOC already reaches the customer on the phone number they gave, so requiring an
+ * address would collect personal data that the order does not need. The address
+ * exists for one purpose only: so JOC can send order updates and a secure
+ * tracking link to a customer who wants them. Blank is always valid, on the
+ * client and on the server, and a customer who leaves it empty still orders
+ * exactly as before.
+ */
+export const EMAIL_OPTIONAL_NOTE =
+  "Optional. We use it only to send your order updates and tracking link. We never share it.";
 
 /* ------------------------------ Order states ------------------------------ */
 
@@ -248,6 +266,7 @@ function yyyymmdd(date) {
 export const VALIDATION_MESSAGES = {
   name: "Please enter your name.",
   phone: "Please enter a valid 10-digit mobile number.",
+  email: "Please enter a valid email address, or leave it empty.",
   address: "Please enter your delivery address.",
   paymentMethod: "Please choose a payment method.",
   cart: "Your cart is empty.",
@@ -255,6 +274,31 @@ export const VALIDATION_MESSAGES = {
 };
 
 const NAME_RE = /^[\p{L}\p{M}][\p{L}\p{M}\s.'-]*$/u;
+
+/**
+ * A deliberately conservative address shape.
+ *
+ * It is not an attempt to prove an address exists — nothing on this screen can do
+ * that. It only rejects input that could never be delivered to: no "@", spaces,
+ * no TLD, or a stray newline. Anything it accepts is stored and escaped; nothing
+ * it rejects is ever used as a mail target.
+ */
+const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+
+/**
+ * Normalise an email address, or return null when it is unusable.
+ *
+ * An empty or whitespace-only value is NOT an error: it means the customer
+ * declined to give one. Only a non-empty value that fails EMAIL_RE is rejected,
+ * so a half-typed address is caught early rather than silently discarded.
+ */
+export function normaliseEmail(raw) {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim().replace(/\s+/g, "");
+  if (value.length === 0) return null;
+  if (value.length > LIMITS.email) return undefined;
+  return EMAIL_RE.test(value) ? value.toLowerCase() : undefined;
+}
 
 /** Indian mobile numbers: 10 digits starting 6-9. Accepts +91 / 0 prefixes. */
 export function normalisePhone(raw) {
@@ -284,9 +328,13 @@ export function validateCheckout(input, { requireItems = true } = {}) {
   const landmark = cleanText(input?.landmark, LIMITS.landmark);
   const instructions = cleanText(input?.instructions, LIMITS.instructions);
   const method = input?.paymentMethod;
+  // null = the customer gave none (valid). undefined = they gave one that cannot
+  // be used. Both are folded into the single `email` field below.
+  const email = normaliseEmail(input?.email);
 
   if (name.length < 2 || !NAME_RE.test(name)) errors.name = VALIDATION_MESSAGES.name;
   if (!phone) errors.phone = VALIDATION_MESSAGES.phone;
+  if (email === undefined) errors.email = VALIDATION_MESSAGES.email;
   if (address.length < 8) errors.address = VALIDATION_MESSAGES.address;
   if (!isPaymentMethod(method)) {
     errors.paymentMethod = VALIDATION_MESSAGES.paymentMethod;
@@ -299,7 +347,7 @@ export function validateCheckout(input, { requireItems = true } = {}) {
     errors,
     valid: Object.keys(errors).length === 0,
     value: Object.keys(errors).length === 0
-      ? { name, phone, address, landmark, instructions, paymentMethod: method }
+      ? { name, phone, email: email ?? null, address, landmark, instructions, paymentMethod: method }
       : null,
   };
 }

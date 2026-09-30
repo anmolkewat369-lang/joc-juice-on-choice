@@ -21,10 +21,11 @@ import {
   ATTENTION_PAYMENT_STATUSES,
   canTransitionOrderStatus,
 } from "../../shared/ordering.js";
-import { toAdminOrder, toAdminEvent } from "./store.js";
+import { toAdminOrder, toAdminEvent, toAdminNotification } from "./store.js";
 import { appendOrderEvent } from "./orderEvents.js";
 import { isOrderId } from "./orderToken.js";
 import { ApiError } from "./http.js";
+import { notifyOrderStatus, notifyPaymentVerified } from "./notify.js";
 
 export { isOrderId } from "./orderToken.js";
 /* --------------------------------- filters ------------------------------- */
@@ -125,14 +126,32 @@ function pageBoundsFrom({ page, pageSize }) {
   return { limit: size, offset: (number - 1) * size, page: number, pageSize: size };
 }
 
+/**
+ * Everything the drawer shows for one order.
+ *
+ * `notifications` is the send ledger for that order, so an admin can answer "did
+ * the confirmation actually go out?" from the screen instead of digging through
+ * logs. Recipients arrive masked (see `toAdminNotification`).
+ *
+ * The ledger is best-effort from the caller's point of view: a failure to read it
+ * must not hide an order that exists and can be actioned, so it degrades to an
+ * empty list rather than a 500.
+ */
 export async function getOrderDetail(store, orderId) {
   if (!isOrderId(orderId)) {
     throw new ApiError(404, "That order does not exist.", "order_not_found");
   }
   const row = await store.getOrder(String(orderId).toUpperCase());
   if (!row) throw new ApiError(404, "That order does not exist.", "order_not_found");
-  const events = await store.listOrderEvents(row.id);
-  return { order: toAdminOrder(row), events: events.map(toAdminEvent) };
+  const [events, notifications] = await Promise.all([
+    store.listOrderEvents(row.id),
+    store.listNotifications(row.id).catch(() => []),
+  ]);
+  return {
+    order: toAdminOrder(row),
+    events: events.map(toAdminEvent),
+    notifications: notifications.map(toAdminNotification),
+  };
 }
 
 /* --------------------------------- actions ------------------------------- */
@@ -174,6 +193,14 @@ export async function changeOrderStatus(store, orderId, nextStatus, admin, { not
     actor: adminLabel(admin),
     note: note ?? null,
   });
+
+  // Tell the customer, after the write has succeeded and never before. Ordering
+  // matters in both directions: notifying first would send "we are preparing
+  // your order" for a change that then failed to save, and the ledger entry would
+  // now block the retry from ever telling them. Awawnted rather than fire-and-
+  // forget so the send is not abandoned when the function returns.
+  await notifyOrderStatus(store, updated);
+
   return { order: toAdminOrder(updated), changed: true };
 }
 
@@ -230,6 +257,11 @@ export async function verifyPayment(store, orderId, admin, { note } = {}) {
     note: note ?? `UTR ${row.payment_reference} confirmed by ${admin.email}`,
     metadata: { paymentReference: row.payment_reference, total: row.total },
   });
+
+  // The customer's money is confirmed — the one moment they most want to know,
+  // and the one moment worth being certain went out exactly once. Same ordering
+  // rule as the status change: after the write, never before.
+  await notifyPaymentVerified(store, updated);
 
   return { order: toAdminOrder(updated), changed: true };
 }

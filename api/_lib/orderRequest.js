@@ -39,7 +39,10 @@ export function readIdempotencyKey(req) {
 export function buildOrderRecord(body) {
   const { errors, valid, value } = validateCheckout(body);
   if (!valid) {
-    throw new ApiError(422, firstError(errors), "invalid_checkout", errors);
+    // The whole field map travels in `errors`, and the first message becomes the
+    // headline. They are separate slots because a client must be able to tell
+    // "this input is wrong" apart from "here is some context about the refusal".
+    throw new ApiError(422, firstError(errors), "invalid_checkout", null, errors);
   }
 
   const { lines, totals, error } = priceItems(body.items);
@@ -60,6 +63,8 @@ export function buildOrderRecord(body) {
   return {
     customerName: value.name,
     phone: value.phone,
+    // Null when the customer gave none, which is normal and not an error.
+    customerEmail: value.email,
     address: value.address,
     landmark: value.landmark,
     specialInstructions: value.instructions,
@@ -81,6 +86,42 @@ export function buildOrderRecord(body) {
     paymentStatus: PAYMENT_STATUS.PENDING,
     orderStatus: ORDER_STATUS.RECEIVED,
     accessToken: newAccessToken(),
+    /**
+     * The emailed tracking link is built from the SAME secret the customer is
+     * given at order time — one secret per order, not two.
+     *
+     * Two separate secrets would have to be rotated together, would double the
+     * number of values that could leak, and would let one be used where the other
+     * was not intended. Reusing it means a single rotation invalidates every
+     * outstanding link, which is the revocation story an operator wants.
+     */
+    trackingToken: undefined,
+    // Filled in by the order route from the delivery check it performed. Kept as
+    // an explicit field so `createOrder` has one obvious place to read it from and
+    // nothing can accidentally persist a check that never happened.
+    delivery: null,
+  };
+}
+
+/**
+ * Attach the delivery verification and the tracking token to a priced record.
+ *
+ * Kept separate from buildOrderRecord because the check happens between pricing
+ * and persistence, and the ordering matters: price -> verify -> persist. A
+ * function that built the whole record at once would make it too easy to reorder
+ * those three steps and persist an unverified order.
+ */
+export function withDeliveryVerification(record, checked, checkedAt = new Date().toISOString()) {
+  return {
+    ...record,
+    delivery: {
+      outcome: checked.outcome,
+      eligible: checked.eligible,
+      distanceMeters: checked.distanceMeters,
+      radiusKm: checked.radiusKm,
+      checkedAt,
+    },
+    trackingToken: record.accessToken,
   };
 }
 

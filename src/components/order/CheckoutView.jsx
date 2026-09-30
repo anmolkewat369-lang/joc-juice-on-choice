@@ -5,6 +5,8 @@ import { formatPrice } from "../../data/menu";
 import {
   DELIVERY_LABEL,
   DELIVERY_NOTE,
+  DELIVERY_PENDING_LABEL,
+  EMAIL_OPTIONAL_NOTE,
   LIMITS,
   PAYMENT_METHOD,
   PAYMENT_PROVIDER,
@@ -13,12 +15,14 @@ import {
 import { cartHref, homeHref } from "../../lib/route";
 import { useOrderFlow, isBusy, FLOW } from "../../lib/useOrderFlow";
 import Field from "./Field";
+import DeliveryCheck from "./DeliveryCheck";
 import PaymentChoice from "./PaymentChoice";
 import styles from "./CheckoutView.module.css";
 
 const EMPTY_FORM = {
   name: "",
   phone: "",
+  email: "",
   address: "",
   landmark: "",
   instructions: "",
@@ -34,9 +38,9 @@ const BUTTON_COPY = {
 /**
  * Guest checkout — no account, no registration.
  *
- * Collected: name, mobile, address, and optionally a landmark and a note.
- * Nothing else. The same `validateCheckout` used by the server runs here for
- * inline messages, and the server still re-validates everything it receives.
+ * Collected: name, mobile, address, and optionally a landmark, a note and an email
+ * address. The same `validateCheckout` used by the server runs here for inline
+ * messages, and the server still re-validates everything it receives.
  */
 export default function CheckoutView({ onPlaced, onReturnHome }) {
   const { lines, subtotal, deliveryCharge, total, isEmpty } = useCart();
@@ -166,6 +170,21 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
                   placeholder="e.g. 96301 94023"
                   required
                 />
+                <div className={styles.full}>
+                  <Field
+                    id="email"
+                    label="Email Address"
+                    value={form.email}
+                    onChange={update("email")}
+                    error={errors.email}
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    maxLength={LIMITS.email}
+                    hint={EMAIL_OPTIONAL_NOTE}
+                    placeholder="e.g. rahul@example.com"
+                  />
+                </div>
               </div>
             </fieldset>
 
@@ -206,6 +225,14 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
                     maxLength={LIMITS.instructions}
                     placeholder="Less spicy, no onion, call on arrival…"
                   />
+                </div>
+                <div className={styles.full}>
+                  {/*
+                   * A preview only. The order route re-runs the same check against
+                   * this address before anything is created, so this component can
+                   * never be the reason an out-of-range order is accepted.
+                   */}
+                  <DeliveryCheck address={form.address} landmark={form.landmark} disabled={busy} />
                 </div>
               </div>
             </fieldset>
@@ -300,7 +327,10 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
               </div>
               <div>
                 <dt>{DELIVERY_LABEL}</dt>
-                <dd>{deliveryCharge === 0 ? "Free" : formatPrice(deliveryCharge)}</dd>
+                {/* A zero charge means JOC has not set one, so it is labelled
+                    "to be confirmed" — never "Free", which would be a claim we
+                    have not made. */}
+                <dd>{deliveryCharge > 0 ? formatPrice(deliveryCharge) : DELIVERY_PENDING_LABEL}</dd>
               </div>
               <div className={styles.grand}>
                 <dt>Total</dt>

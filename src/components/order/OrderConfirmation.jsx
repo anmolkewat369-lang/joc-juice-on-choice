@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
   CircleSlash,
   Home,
   Loader2,
+  Mail,
+  MapPin,
   Phone,
   RefreshCw,
   ShoppingBag,
@@ -16,16 +18,38 @@ import {
   CUSTOMER_PAYMENT_STATE,
   DELIVERY_LABEL,
   DELIVERY_PENDING_LABEL,
+  ORDER_STATUS,
+  ORDER_STATUS_FLOW,
+  ORDER_STATUS_LABELS,
   PAYMENT_METHOD,
   PAYMENT_METHOD_LABELS,
   PAYMENT_METHOD_USED_LABELS,
   PAYMENT_STATUS,
+  PAYMENT_STATUS_LABELS,
   customerPaymentState,
 } from "../../../shared/ordering.js";
+import { formatDistanceKm } from "../../../shared/delivery.js";
 import { getOrderDetail } from "../../lib/api";
 import { useOrderFlow, isBusy } from "../../lib/useOrderFlow";
 import UpiPaymentPanel from "./UpiPaymentPanel";
 import styles from "./OrderConfirmation.module.css";
+
+/**
+ * How often an unfinished order re-reads its status.
+ *
+ * 30s, not 5s. This page is usually left open by a customer waiting for a juice
+ * shop to start making their order, and the status changes a handful of times over
+ * tens of minutes — polling every 5s would spend a serverless invocation every
+ * five seconds to learn "still preparing". A manual Refresh sits right next to it
+ * for the customer who wants to know right now.
+ *
+ * Polling STOPS once the order reaches a terminal state. An open tab on a
+ * delivered order has nothing left to learn, and an idle poll forever is how a
+ * cheap feature quietly becomes an expensive one.
+ */
+const POLL_MS = 30_000;
+
+const TERMINAL_STATUSES = new Set([ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED]);
 
 /**
  * One screen covers every terminal state of an order:
@@ -38,13 +62,27 @@ import styles from "./OrderConfirmation.module.css";
  *
  * It reloads the order from the server on mount, so a refresh here is safe and
  * the status shown is always the server's, never a leftover browser state.
+ *
+ * It doubles as the guest TRACKING page. `token` arrives from an emailed
+ * `#/order/<id>?t=<token>` link, so a customer can follow their order from any
+ * device without an account — while the proof of ownership stays the same
+ * per-order secret, checked against a hash in constant time.
  */
-export default function OrderConfirmation({ orderId, initialOutcome, storageNotice, onSettled }) {
+export default function OrderConfirmation({
+  orderId,
+  token,
+  initialOutcome,
+  storageNotice,
+  onSettled,
+}) {
   const { clearCart } = useCart();
   const [order, setOrder] = useState(null);
   const [payment, setPayment] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  /** A failed manual refresh only. Cleared by the next attempt. */
+  const [refreshError, setRefreshError] = useState(null);
   const headingRef = useRef(null);
 
   const flow = useOrderFlow({
@@ -55,19 +93,54 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
     },
   });
 
+  /**
+   * One loader, used by the mount, the manual refresh and the poll.
+   *
+   * `quiet` is what separates a background poll from a customer-visible action:
+   * a poll must never blank the page or spin a spinner, or the screen would flash
+   * every 30 seconds. Only the first load and a manual refresh show progress.
+   */
+  const load = useCallback(
+    async ({ signal, quiet = false } = {}) => {
+      if (!quiet) setRefreshing(true);
+      try {
+        const data = await getOrderDetail(orderId, { signal, token });
+        setOrder(data.order);
+        setPayment(data.payment ?? null);
+        setLoadError(null);
+        if (
+          data.order.paymentStatus === PAYMENT_STATUS.PAID ||
+          data.order.paymentMethod === PAYMENT_METHOD.COD
+        ) {
+          clearCart();
+        }
+        return data.order;
+      } finally {
+        if (!quiet) setRefreshing(false);
+      }
+    },
+    [orderId, token, clearCart],
+  );
+
+  /**
+   * The customer pressed Refresh, so a failure here IS their problem and is worth
+   * one quiet line — unlike a background poll, which fails silently. The order on
+   * screen is left exactly as it was: a stale status beats no status, and the
+   * server's answer is still the one that counts.
+   */
+  const refresh = () => {
+    setRefreshError(null);
+    load().catch((error) => {
+      if (error.name === "AbortError") return;
+      setRefreshError(error.message);
+    });
+  };
+
   // Reload from the server: the truth lives there, and a refresh must not lose it.
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    getOrderDetail(orderId, { signal: controller.signal })
-      .then((data) => {
-        setOrder(data.order);
-        setPayment(data.payment ?? null);
-        setLoadError(null);
-        if (data.order.paymentStatus === PAYMENT_STATUS.PAID || data.order.paymentMethod === PAYMENT_METHOD.COD) {
-          clearCart();
-        }
-      })
+    load({ signal: controller.signal })
       .catch((error) => {
         if (error.name === "AbortError") return;
         setLoadError(error.message);
@@ -76,7 +149,28 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
     return () => controller.abort();
     // clearCart is stable; re-running on it would refetch on every cart change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderId]);
+  }, [load]);
+
+  /**
+   * Live status, while the order is still in progress.
+   *
+   * The interval is not left running for a delivered or cancelled order, and a
+   * failed poll is swallowed rather than surfaced — a tracking page that shouts
+   * "could not reach JOC" because one request timed out is worse than one that
+   * quietly tries again in 30 seconds.
+   */
+  useEffect(() => {
+    if (!order || TERMINAL_STATUSES.has(order.orderStatus)) return undefined;
+
+    const timer = setInterval(() => {
+      const controller = new AbortController();
+      load({ signal: controller.signal, quiet: true }).catch(() => {
+        /* offline, or the tab was backgrounded — the next tick tries again */
+      });
+    }, POLL_MS);
+
+    return () => clearInterval(timer);
+  }, [order, load]);
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -236,6 +330,11 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
           </div>
         </dl>
 
+        {/* The live view of an order in progress. This is what makes the emailed
+            tracking link worth having: a customer can see where their order has
+            got to without messaging the shop. */}
+        <OrderTimeline order={order} />
+
         {awaitingPayment ? (
           <UpiPaymentPanel
             order={order}
@@ -263,7 +362,30 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
               <Phone size={14} aria-hidden="true" />
               {order.phone}
             </span>
+            {/*
+             * Only shown when the customer actually gave one. Echoing their own
+             * address back is useful for the tracking use case; inventing an
+             * empty-looking row for the many orders without one would not be.
+             */}
+            {order.customerEmail ? (
+              <span className={styles.phone}>
+                <Mail size={14} aria-hidden="true" />
+                {order.customerEmail}
+              </span>
+            ) : null}
           </p>
+          {/*
+           * The verified driving distance, recorded at order time. Shown only when
+           * a check actually happened — an order placed before the rule existed has
+           * no distance, and inventing "—" that reads like a failed check would be
+           * a small lie about the record.
+           */}
+          {order.delivery?.verified && order.delivery.distanceMeters != null ? (
+            <p className={styles.distance}>
+              <MapPin size={14} aria-hidden="true" />
+              Verified {formatDistanceKm(order.delivery.distanceMeters)} from the store by road
+            </p>
+          ) : null}
           {order.specialInstructions ? (
             <p className={styles.instructions}>
               <span>Note for us:</span> {order.specialInstructions}
@@ -285,7 +407,30 @@ export default function OrderConfirmation({ orderId, initialOutcome, storageNoti
             <Home size={18} aria-hidden="true" />
             Back to Home
           </a>
+          {/*
+           * Offered while the order can still change. For a delivered order the
+           * button would do nothing, so it is removed rather than left as a
+           * control that lies about its effect.
+           */}
+          {!TERMINAL_STATUSES.has(order.orderStatus) ? (
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={refresh}
+              disabled={refreshing}
+              aria-busy={refreshing}
+            >
+              <RefreshCw className={refreshing ? styles.spin : undefined} size={17} aria-hidden="true" />
+              {refreshing ? "Refreshing…" : "Refresh status"}
+            </button>
+          ) : null}
         </div>
+
+        {refreshError ? (
+          <p className={styles.notice} role="status">
+            {refreshError} The status above is the last one we could load.
+          </p>
+        ) : null}
       </div>
     </Shell>
   );
@@ -323,26 +468,83 @@ function OrderLines({ order }) {
       </ul>
       <p className={styles.itemTotals}>
         Subtotal {formatPrice(order.subtotal)} · {DELIVERY_LABEL}{" "}
-        {order.deliveryCharge === 0 ? DELIVERY_PENDING_LABEL : formatPrice(order.deliveryCharge)}
+        {order.deliveryCharge > 0 ? formatPrice(order.deliveryCharge) : DELIVERY_PENDING_LABEL}
+      </p>
+      <p className={styles.itemTotal}>
+        Total <strong>{formatPrice(order.total)}</strong>
       </p>
     </div>
   );
 }
 
+/**
+ * The order's progress through the lifecycle.
+ *
+ * Derived entirely from `order.orderStatus` — the server's value — rather than
+ * from a log of transitions the browser remembers. A customer who opens this page
+ * halfway through, on a new device, sees the same timeline as one who never closed
+ * the tab, because there is only one source and it is not in the browser.
+ *
+ * A CANCELLED order gets its own single-step timeline instead of a row of
+ * unticked circles: showing "Received ✓ Preparing ○ Ready ○ …" for an order that
+ * will never be prepared is a small, unnecessary lie.
+ */
+function OrderTimeline({ order }) {
+  if (order.orderStatus === ORDER_STATUS.CANCELLED) {
+    return (
+      <div className={styles.timeline}>
+        <h2>Order progress</h2>
+        <p className={styles.timelineCancelled}>
+          <CircleSlash size={15} aria-hidden="true" />
+          This order was cancelled.
+        </p>
+      </div>
+    );
+  }
+
+  const steps = ORDER_STATUS_FLOW;
+  const reached = steps.indexOf(order.orderStatus);
+
+  return (
+    <div className={styles.timeline}>
+      <h2>Order progress</h2>
+      <ol>
+        {steps.map((step, index) => {
+          const done = reached > index;
+          const current = reached === index;
+          return (
+            <li
+              key={step}
+              className={done ? styles.stepDone : current ? styles.stepCurrent : styles.stepTodo}
+              aria-current={current ? "step" : undefined}
+            >
+              <span className={styles.stepDot} aria-hidden="true">
+                {done ? <Check size={12} /> : index + 1}
+              </span>
+              <span className={styles.stepLabel}>{STATUS_LABELS[step]}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * Customer-facing status wording.
+ *
+ * Built from the shared tables so a status added server-side still renders here,
+ * with one override: "Verification required" is admin phrasing, and the customer
+ * reading it is waiting to find out whether their money arrived. The raw value is
+ * the last resort, never a blank.
+ */
 const STATUS_LABELS = {
-  PENDING: "Pending",
-  PAYMENT_VERIFICATION_REQUIRED: "Awaiting our confirmation",
-  PAID: "Paid",
-  FAILED: "Not completed",
-  REFUNDED: "Refunded",
-  RECEIVED: "Received",
-  CONFIRMED: "Confirmed",
-  PREPARING: "Preparing",
-  READY: "Ready",
-  OUT_FOR_DELIVERY: "Out for delivery",
-  DELIVERED: "Delivered",
-  CANCELLED: "Cancelled",
+  ...PAYMENT_STATUS_LABELS,
+  ...ORDER_STATUS_LABELS,
+  [PAYMENT_STATUS.PAYMENT_VERIFICATION_REQUIRED]: "Awaiting our confirmation",
 };
+
+const statusLabel = (status) => STATUS_LABELS[status] ?? status;
 
 /**
  * Headline copy, keyed by the shared customer-facing state.
@@ -377,5 +579,3 @@ const CUSTOMER_COPY = {
     lead: "You closed the payment window. Your order is saved — you can try again or pay cash on delivery.",
   },
 };
-
-const statusLabel = (status) => STATUS_LABELS[status] ?? status;

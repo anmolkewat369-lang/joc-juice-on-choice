@@ -44,9 +44,14 @@ async function request(path, { method = "GET", body, idempotencyKey, signal, hea
 
   if (!response.ok) {
     const detail = payload?.error;
+    // `errors` is a map of field name -> message, and only `invalid_checkout`
+    // produces one. Every other refusal uses `details` for context that is NOT a
+    // field error (`delivery_unavailable` puts a distance and an outcome there),
+    // so hydrating the form from it would paste "OUT_OF_RANGE" onto an input.
+    const fieldErrors = detail?.code === "invalid_checkout" ? detail?.errors ?? null : null;
     throw new ApiRequestError(
       detail?.message ?? "Something went wrong. Please try again.",
-      { code: detail?.code ?? "server_error", status: response.status, fieldErrors: detail?.errors },
+      { code: detail?.code ?? "server_error", status: response.status, fieldErrors },
     );
   }
 
@@ -78,6 +83,23 @@ function recallToken(orderId) {
   }
 }
 
+/**
+ * Adopt a token that arrived in a tracking link.
+ *
+ * When the customer follows the emailed `#/order/<id>?t=<token>` link, this is the
+ * first time their browser has seen the order secret. Storing it in
+ * sessionStorage means every later call — the poll, the payment, the UTR
+ * submission — can use the header path without the token being threaded through
+ * the whole component tree, and without it ever appearing in a query string.
+ *
+ * It is a copy into the tab, not a replacement of the server's copy: the
+ * database still holds only the hash, and this is still the same secret, still
+ * checked in constant time against `access_hash`.
+ */
+function adoptToken(orderId, token) {
+  rememberToken(orderId, token);
+}
+
 /* --------------------------------- calls --------------------------------- */
 
 export const createOrder = (payload, idempotencyKey) =>
@@ -92,18 +114,24 @@ export const createOrder = (payload, idempotencyKey) =>
     return data;
   });
 
-export const getOrder = (orderId, { signal } = {}) =>
-  getOrderDetail(orderId, { signal }).then((data) => data.order);
+export const getOrder = (orderId, { signal, token } = {}) =>
+  getOrderDetail(orderId, { signal, token }).then((data) => data.order);
 
 /**
  * The order plus its payment view — the UPI ID, intent URI and QR rebuilt from
  * the total the *server* priced. Kept separate from getOrder because only the
  * confirmation screen needs the payment half, and returning the whole payload
  * everywhere would invite a caller to trust a client-side total.
+ *
+ * `token` lets a caller that arrived through an emailed tracking link supply the
+ * secret it read from the fragment. It is stored once so subsequent polls do not
+ * have to keep passing it around.
  */
-export const getOrderDetail = (orderId, { signal } = {}) => {
-  const token = recallToken(orderId);
-  if (!token) {
+export const getOrderDetail = (orderId, { signal, token } = {}) => {
+  if (token) adoptToken(orderId, token);
+
+  const secret = recallToken(orderId);
+  if (!secret) {
     return Promise.reject(
       new ApiRequestError("We could not find that order on this device.", {
         code: "order_not_found",
@@ -116,9 +144,42 @@ export const getOrderDetail = (orderId, { signal } = {}) => {
   // JOC_ALLOW_TOKEN_QUERY=true, but only for links that were intentionally shared.
   return request(`/api/orders/${encodeURIComponent(orderId)}`, {
     signal,
-    headers: { "X-Order-Token": token },
+    headers: { "X-Order-Token": secret },
   });
 };
+
+/**
+ * The delivery rule, without checking any address.
+ *
+ * Read once when the checkout opens so the form can state the rule before the
+ * customer has typed anything. It comes from the same value the order route
+ * enforces, which is the only way the sentence on the form cannot drift away
+ * from the refusal the customer would get.
+ */
+export const getDeliveryConfig = async ({ signal } = {}) => {
+  try {
+    return await request("/api/delivery/config", { signal });
+  } catch {
+    // No rule known. The checkout stays usable — the order route will still
+    // enforce the real limit — it just cannot preview it up front.
+    return { radiusKm: null, radiusMeters: null, configured: false, rule: null };
+  }
+};
+
+/**
+ * Ask whether JOC can deliver to an address.
+ *
+ * A preview, and nothing more: the order route repeats the same check itself
+ * before creating anything. `available: false` therefore means "we know you are
+ * too far" OR "we could not check" — the caller shows the message either way,
+ * because acting on the difference is the server's job, not the form's.
+ */
+export const checkDelivery = ({ address, landmark }, { signal } = {}) =>
+  request("/api/delivery/check", {
+    method: "POST",
+    body: { address, landmark },
+    signal,
+  }).then((data) => data.delivery);
 
 /**
  * What the customer can pay with, per the server.

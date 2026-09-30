@@ -116,6 +116,10 @@ export function useOrderFlow({ onComplete }) {
             items: items.map(({ id, qty }) => ({ id, qty })),
             name: details.name,
             phone: details.phone,
+            // Null when the customer left it blank, which is valid. Sent either way
+            // so the server sees the field as absent rather than missing, and the
+            // "optional" decision stays in one place — shared/ordering.js.
+            email: details.email ?? null,
             address: details.address,
             landmark: details.landmark,
             instructions: details.instructions,

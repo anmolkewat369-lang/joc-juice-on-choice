@@ -29,6 +29,7 @@ import {
 import { rateLimit, sweepRateLimits } from "../_lib/rateLimit.js";
 import { requireOwnedOrderId, orderIdFromBody, isOrderId } from "../_lib/orderToken.js";
 import { appendOrderEvent } from "../_lib/orderEvents.js";
+import { notifyPaymentVerified } from "../_lib/notify.js";
 import {
   PAYMENT_METHOD,
   PAYMENT_STATUS,
@@ -140,6 +141,12 @@ export default async function handler(req, res) {
       note: isTestMode() ? "Razorpay test-mode payment" : "Razorpay payment",
       metadata: { gatewayOrderId, amount: order.total },
     });
+
+    // The gateway settled the money, so tell the customer — through the same
+    // ledger-deduped path as a manual verification, so a customer who somehow
+    // reached PAID twice is still told exactly once. Awaited, and incapable of
+    // throwing, so the verified response is never at the mercy of an email.
+    await notifyPaymentVerified(store, updated);
 
     return sendJson(res, 200, { order: toPublicOrder(updated), verified: true });
   } catch (error) {
