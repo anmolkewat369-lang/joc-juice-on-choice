@@ -54,6 +54,37 @@ export function sendJson(res, status, payload) {
   res.status(status).json(payload);
 }
 
+/**
+ * Is this request for the ALIAS half of a route that now lives in one file?
+ *
+ * The Vercel Hobby plan caps a deployment at 12 functions, so two pairs of JOC
+ * routes that only ever answered different methods were merged into one handler
+ * each. Neither pair lost its public URL: vercel.json rewrites the alias onto
+ * the file that also serves the primary route, so the browser keeps asking for
+ * the URL it always asked for.
+ *
+ * The PATH is what tells them apart, because Vercel hands a rewritten request to
+ * the destination function with the ORIGINAL path still in `req.url` — the
+ * browser asked for the alias and only the destination changed. Overriding that
+ * is possible in Vercel's routing API, but not from vercel.json, so a plain
+ * rewrite always arrives here with the alias path intact.
+ *
+ * The method is only a fallback, for a handler invoked with no path at all: the
+ * dev checks import a handler and call it directly, and the merged pairs never
+ * overlapped — the preview/create half is POST-only and the config/methods half
+ * is GET-only.
+ *
+ * `primaryMethod` is the method that belongs to the primary route, so a caller
+ * invoked without a path still lands on the right half. It is a routing
+ * convenience only: an authorisation check never depends on it.
+ */
+export function servesAlias(req, { primary, alias, primaryMethod = "POST" }) {
+  const path = String(req?.url ?? "").split("?")[0].replace(/\/+$/, "");
+  if (path === alias) return true;
+  if (path === primary) return false;
+  return req.method !== primaryMethod;
+}
+
 export function sendError(res, error) {
   const status = error instanceof ApiError ? error.status : 500;
   const code = error instanceof ApiError ? error.code : "server_error";

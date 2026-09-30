@@ -172,7 +172,10 @@ check("a missing order token is refused", async () => {
 
 /* ------------------- payment routes reject unowned orders ----------------- */
 
-const callRoute = async (modulePath, { method = "POST", headers = {}, body = {}, query = {} } = {}) => {
+const callRoute = async (
+  modulePath,
+  { method = "POST", headers = {}, body = {}, query = {}, url } = {},
+) => {
   const { default: handler } = await import(modulePath);
   const req = {
     method,
@@ -180,6 +183,10 @@ const callRoute = async (modulePath, { method = "POST", headers = {}, body = {},
     query,
     body,
   };
+  // Two of the routes now live in a handler that serves two URLs, and the path
+  // is how it tells them apart, so a check can state the URL it is calling the
+  // way a browser would.
+  if (url) req.url = url;
   const res = {
     statusCode: 200,
     headers: {},
@@ -541,7 +548,10 @@ const withUpiEnv = (fn) => async () => {
 };
 
 check("checkout offers Cash on Delivery AND UPI when a UPI ID is configured", withUpiEnv(async () => {
-  const res = await callRoute("../api/payments/methods.js", { method: "GET" });
+  const res = await callRoute("../api/payments/create.js", {
+    method: "GET",
+    url: "/api/payments/methods",
+  });
   assert.equal(res.statusCode, 200);
   assert.equal(res.payload.provider, "manual_upi");
 
@@ -551,7 +561,10 @@ check("checkout offers Cash on Delivery AND UPI when a UPI ID is configured", wi
 }));
 
 check("the advertised UPI method carries the UPI ID for the checkout", withUpiEnv(async () => {
-  const res = await callRoute("../api/payments/methods.js", { method: "GET" });
+  const res = await callRoute("../api/payments/create.js", {
+    method: "GET",
+    url: "/api/payments/methods",
+  });
   const upi = res.payload.methods.find((entry) => entry.method === "UPI");
   assert.equal(upi.vpa, UPI_ID, "checkout needs the UPI ID to show and copy it");
   assert.equal(upi.provider, "manual_upi");
@@ -561,7 +574,10 @@ check("a missing JOC_UPI_ID falls back to Cash on Delivery only", async () => {
   delete process.env.JOC_UPI_ID;
   process.env.JOC_PAYMENT_PROVIDER = "manual_upi";
   try {
-    const res = await callRoute("../api/payments/methods.js", { method: "GET" });
+    const res = await callRoute("../api/payments/create.js", {
+      method: "GET",
+      url: "/api/payments/methods",
+    });
     const methods = res.payload.methods.map((entry) => entry.method);
     assert.deepEqual(methods, ["COD"], "an unpayable option must not be offered");
     assert.equal(res.payload.provider, "manual_upi", "the provider is still selected, just unusable");
@@ -574,7 +590,10 @@ check("a malformed or unconfigured UPI ID never offers UPI", async () => {
   for (const bad of ["", "   ", "not-a-upi-id", "9630194023@", "@pthdfc", "9630194023@pthdfc extra"]) {
     process.env.JOC_UPI_ID = bad;
     process.env.JOC_PAYMENT_PROVIDER = "manual_upi";
-    const res = await callRoute("../api/payments/methods.js", { method: "GET" });
+    const res = await callRoute("../api/payments/create.js", {
+      method: "GET",
+      url: "/api/payments/methods",
+    });
     assert.deepEqual(
       res.payload.methods.map((entry) => entry.method),
       ["COD"],
@@ -600,12 +619,85 @@ check("Cash on Delivery is offered even when the provider is razorpay but unconf
   process.env.JOC_PAYMENT_PROVIDER = "razorpay";
   delete process.env.JOC_UPI_ID;
   try {
-    const res = await callRoute("../api/payments/methods.js", { method: "GET" });
+    const res = await callRoute("../api/payments/create.js", {
+      method: "GET",
+      url: "/api/payments/methods",
+    });
     assert.deepEqual(res.payload.methods.map((entry) => entry.method), ["COD"]);
     assert.equal(res.payload.provider, "razorpay");
   } finally {
     delete process.env.JOC_PAYMENT_PROVIDER;
   }
+});
+
+/* --------------------- the merged payment handler -------------------------- */
+
+/**
+ * /api/payments/methods and /api/payments/create now share one function, so
+ * these checks are about the seam rather than the payments themselves: the old
+ * URL must still answer exactly what it answered, the new one must still be the
+ * only token-guarded path into Razorpay, and neither may expose a credential.
+ */
+
+check("GET /api/payments/methods answers from the create handler, capability only", withUpiEnv(async () => {
+  const res = await callRoute("../api/payments/create.js", {
+    method: "GET",
+    url: "/api/payments/methods",
+  });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(
+    Object.keys(res.payload).sort(),
+    ["methods", "provider"],
+    "the capability read must stay a capability read",
+  );
+  assert.equal(res.headers["Content-Type"], "application/json; charset=utf-8");
+
+  // Nothing that identifies the deployment or a credential, whatever is set.
+  const body = JSON.stringify(res.payload);
+  for (const [name, value] of Object.entries(process.env)) {
+    if (!value || value.length < 8) continue;
+    if (!/(KEY|SECRET|TOKEN|PASSWORD|DATABASE|URL)/.test(name)) continue;
+    assert.equal(body.includes(value), false, `${name} leaked into the methods response`);
+  }
+}));
+
+check("the merged handler refuses a POST on the methods URL", async () => {
+  // It shares a file with the create route now, so the shared file must not have
+  // turned the public capability read into a second entry point.
+  const res = await callRoute("../api/payments/create.js", {
+    method: "POST",
+    url: "/api/payments/methods",
+    body: { orderId: "JOC-0001" },
+  });
+  assert.equal(res.statusCode, 405, `expected 405, got ${res.statusCode}`);
+  assert.equal(res.payload.error.code, "method_not_allowed");
+});
+
+check("a GET on the create URL is still refused, not the methods read", async () => {
+  // Only /api/payments/methods is public. The create route keeps its POST-only
+  // guard, so the merged file has exactly one unauthenticated entry point.
+  const res = await callRoute("../api/payments/create.js", {
+    method: "GET",
+    url: "/api/payments/create",
+  });
+  assert.equal(res.statusCode, 405, `expected 405, got ${res.statusCode}`);
+  assert.equal(res.payload.error.code, "method_not_allowed");
+  assert.equal(res.payload.methods, undefined, "no capability may be served off the create URL");
+});
+
+check("payments/create still refuses a caller with no order token after the merge", async () => {
+  const store = await getStore();
+  const { order } = await store.createOrder(
+    upiRecord({ paymentProvider: "razorpay" }),
+    "key-merged-create-1",
+  );
+  const res = await callRoute("../api/payments/create.js", {
+    method: "POST",
+    url: "/api/payments/create",
+    body: { orderId: order.order_id },
+  });
+  assert.equal(res.statusCode, 404, "expected 404 without the order token");
+  assert.equal(res.payload.gatewayOrderId, undefined, "no gateway order may be opened");
 });
 
 /* ---------------------------- end-to-end order paths ----------------------- */

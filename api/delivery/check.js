@@ -1,4 +1,16 @@
 /**
+ * Both delivery questions the checkout asks, served from one function.
+ *
+ *   POST /api/delivery/check   can JOC deliver to this address?
+ *   GET  /api/delivery/config  what is the rule, before any address is typed?
+ *
+ * They share a file because the Vercel Hobby plan caps a deployment at 12
+ * functions. Neither lost its URL: vercel.json rewrites /api/delivery/config onto
+ * this function, and `servesAlias` tells the two requests apart. The answers are
+ * byte-for-byte what the two functions returned before.
+ */
+
+/**
  * POST /api/delivery/check — can JOC deliver to this address?
  *
  * The checkout preview only. It exists so the customer learns whether their
@@ -17,15 +29,39 @@
  * never as "that address is fine".
  */
 
-import { ApiError, clientKey, methodGuard, readJson, sendError, sendJson } from "../_lib/http.js";
+/**
+ * GET /api/delivery/config — the delivery rule, without checking any address.
+ *
+ * The checkout needs to state the rule ("we deliver within N km by road") before
+ * the customer has typed anything, and re-reading that from a bundle is how the
+ * advertised radius drifts away from the enforced one. This returns the same
+ * `normaliseDeliveryRadiusKm` value the gate itself uses, so the sentence on the
+ * form and the sentence in the refusal come from one number.
+ *
+ * No key, no coordinates, no provider detail — only the radius. Whether the
+ * provider is configured is exposed as a plain boolean: the customer needs to be
+ * told when a check cannot run, and an operator needs to see it on the site, but
+ * neither needs to know which secret is missing.
+ */
+
+import {
+  ApiError,
+  clientKey,
+  methodGuard,
+  readJson,
+  sendError,
+  sendJson,
+  servesAlias,
+} from "../_lib/http.js";
 import { rateLimit, sweepRateLimits } from "../_lib/rateLimit.js";
 import { checkDelivery, deliveryConfig, toPublicDeliveryCheck } from "../_lib/delivery.js";
+import { DELIVERY_RULE_NOTE } from "../../shared/delivery.js";
 import { LIMITS } from "../../shared/ordering.js";
 
 /** A preview should be cheap, but each miss costs two Google calls. */
 const RATE_LIMIT = { limit: 15, windowMs: 60_000 };
 
-export default async function handler(req, res) {
+async function deliveryPreview(req, res) {
   if (!methodGuard(req, res, "POST")) return;
 
   try {
@@ -59,4 +95,26 @@ export default async function handler(req, res) {
   } catch (error) {
     return sendError(res, error);
   }
+}
+
+async function deliveryRule(req, res) {
+  if (!methodGuard(req, res, "GET")) return;
+
+  const config = deliveryConfig();
+  return sendJson(res, 200, {
+    radiusKm: config.radiusKm,
+    radiusMeters: config.radiusMeters,
+    configured: config.configured,
+    rule: DELIVERY_RULE_NOTE,
+  });
+}
+
+export default async function handler(req, res) {
+  // The rewritten /api/delivery/config is a read; the preview it was merged with
+  // is a POST. Each half keeps its own method guard, so the merge cannot turn one
+  // into an entry point for the other.
+  if (servesAlias(req, { primary: "/api/delivery/check", alias: "/api/delivery/config" })) {
+    return deliveryRule(req, res);
+  }
+  return deliveryPreview(req, res);
 }

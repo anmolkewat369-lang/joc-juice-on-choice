@@ -286,7 +286,10 @@ check("the cache never stores the address itself", withMaps({ distanceMeters: 42
 
 /* ------------------------- the order route gate ---------------------------- */
 
-const callRoute = async (modulePath, { method = "POST", headers = {}, body = {}, query = {} } = {}) => {
+const callRoute = async (
+  modulePath,
+  { method = "POST", headers = {}, body = {}, query = {}, url } = {},
+) => {
   const { default: handler } = await import(modulePath);
   const req = {
     method,
@@ -298,6 +301,9 @@ const callRoute = async (modulePath, { method = "POST", headers = {}, body = {},
       yield Buffer.from(JSON.stringify(body));
     },
   };
+  // /api/delivery/config and /api/delivery/check share one handler now, and the
+  // path is how it tells them apart, so a check can call the URL a browser would.
+  if (url) req.url = url;
   const res = {
     statusCode: 200,
     headers: {},
@@ -446,6 +452,53 @@ check("the preview refuses an address too short to geocode", async () => {
   });
   assert.equal(res.statusCode, 400);
   assert.equal(res.payload.error.code, "invalid_address");
+});
+
+check("GET /api/delivery/config answers from the check handler, rule only", async () => {
+  const res = await callRoute("../api/delivery/check.js", {
+    method: "GET",
+    url: "/api/delivery/config",
+  });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.payload));
+  // The shape src/lib/api.js reads: radiusKm, radiusMeters, configured, rule.
+  assert.deepEqual(Object.keys(res.payload).sort(), [
+    "configured",
+    "radiusKm",
+    "radiusMeters",
+    "rule",
+  ]);
+  assert.equal(res.payload.radiusKm, deliveryConfig().radiusKm);
+  assert.equal(res.payload.radiusMeters, radiusMeters(res.payload.radiusKm));
+
+  // No key, no store coordinates, no provider detail.
+  const body = JSON.stringify(res.payload);
+  for (const [name, value] of Object.entries(process.env)) {
+    if (!value || value.length < 8) continue;
+    if (!/(KEY|SECRET|TOKEN|PASSWORD|LATITUDE|LONGITUDE)/.test(name)) continue;
+    assert.equal(body.includes(value), false, `${name} leaked into the config response`);
+  }
+  assert.equal(body.includes("23.1815"), false, "the store pin must not be published");
+});
+
+check("the merged handler refuses a POST on the config URL", async () => {
+  // The config read shares a file with the preview now; the seam must not have
+  // turned a rule read into an unthrottled address check.
+  const res = await callRoute("../api/delivery/check.js", {
+    method: "POST",
+    url: "/api/delivery/config",
+    body: { address: ADDRESS, landmark: "Near the petrol pump" },
+  });
+  assert.equal(res.statusCode, 405, `expected 405, got ${res.statusCode}`);
+  assert.equal(res.payload.error.code, "method_not_allowed");
+});
+
+check("a GET on the preview URL is still refused", async () => {
+  const res = await callRoute("../api/delivery/check.js", {
+    method: "GET",
+    url: "/api/delivery/check",
+  });
+  assert.equal(res.statusCode, 405, `expected 405, got ${res.statusCode}`);
+  assert.equal(res.payload.delivery, undefined, "no address may be measured on a GET");
 });
 
 check("the published rule reports the radius actually in force", () => {

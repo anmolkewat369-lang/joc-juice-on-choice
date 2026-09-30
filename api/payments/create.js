@@ -1,4 +1,18 @@
 /**
+ * The payment routes, served from one function.
+ *
+ *   POST /api/payments/create   open a Razorpay checkout for an existing order
+ *   GET  /api/payments/methods  what the customer can actually pay with
+ *
+ * They share a file because the Vercel Hobby plan caps a deployment at 12
+ * functions. Neither lost its URL: vercel.json rewrites /api/payments/methods
+ * onto this function, and `servesAlias` tells the two requests apart. The two
+ * halves share nothing: the GET is the same public capability read as before,
+ * with no token and no rate limit, and the POST keeps its authentication,
+ * rate limit and Razorpay behaviour exactly as they were.
+ */
+
+/**
  * POST /api/payments/create — open a Razorpay checkout for an existing order.
  *
  * The order is already stored by this point; this endpoint only attaches a
@@ -16,7 +30,21 @@
  * refused here and is paid through /api/orders/utr instead.
  */
 
-import { ApiError, methodGuard, readJson, sendError, sendJson, clientKey } from "../_lib/http.js";
+/**
+ * GET /api/payments/methods — what the customer can actually pay with.
+ *
+ * A public, unauthenticated read of *capability*, not of configuration: it says
+ * whether a digital payment is offered and which rail settles it, and it never
+ * returns a UPI ID, a gateway key, or anything else sensitive. The checkout
+ * renders its options from this response so the UI can never offer a method the
+ * server would then refuse.
+ *
+ * The amount, intent URI and QR are deliberately absent here. Those are only
+ * returned with an order the caller owns, because the amount must come from the
+ * priced order rather than from anything the browser supplies.
+ */
+
+import { ApiError, methodGuard, readJson, sendError, sendJson, clientKey, servesAlias } from "../_lib/http.js";
 import { getStore } from "../_lib/store.js";
 import {
   createGatewayOrder,
@@ -24,11 +52,21 @@ import {
   paymentConfig,
   isTestMode,
 } from "../_lib/razorpay.js";
+import { activeProvider, availableMethods } from "../_lib/payments.js";
 import { rateLimit, sweepRateLimits } from "../_lib/rateLimit.js";
 import { requireOwnedOrderId, orderIdFromBody, isOrderId } from "../_lib/orderToken.js";
 import { PAYMENT_METHOD, PAYMENT_STATUS, PAYMENT_PROVIDER } from "../../shared/ordering.js";
 
-export default async function handler(req, res) {
+async function paymentMethods(req, res) {
+  if (!methodGuard(req, res, "GET")) return;
+
+  return sendJson(res, 200, {
+    methods: availableMethods(),
+    provider: activeProvider(),
+  });
+}
+
+async function createPayment(req, res) {
   if (!methodGuard(req, res, "POST")) return;
 
   try {
@@ -95,4 +133,15 @@ export default async function handler(req, res) {
   } catch (error) {
     return sendError(res, error);
   }
+}
+
+export default async function handler(req, res) {
+  // The rewritten /api/payments/methods is a capability read; the create route it
+  // was merged with is a POST that authenticates the order's own token. The GET
+  // half is reached only by its own method guard, so the merge cannot offer a
+  // tokenless path into Razorpay.
+  if (servesAlias(req, { primary: "/api/payments/create", alias: "/api/payments/methods" })) {
+    return paymentMethods(req, res);
+  }
+  return createPayment(req, res);
 }

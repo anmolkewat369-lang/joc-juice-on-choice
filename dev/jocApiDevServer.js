@@ -21,14 +21,19 @@ const API_PREFIX = "/api/";
  * The map is explicit rather than derived from the URL so the dev bridge can
  * only ever reach an endpoint that actually exists — a typo here fails loudly
  * instead of silently 404ing in development while working in production.
+ *
+ * The two merged routes appear twice on purpose. Production reaches their second
+ * URL through a rewrite in vercel.json; this bridge has no rewrite layer, so the
+ * alias is mapped onto the handler that serves it and arrives with its original
+ * path, which is exactly what the production rewrite delivers.
  */
 const ROUTES = [
   { match: /^\/orders$/, file: "orders/index.js" },
   { match: /^\/orders\/utr$/, file: "orders/utr.js" },
   { match: /^\/orders\/[^/]+$/, file: "orders/[orderId].js" },
   { match: /^\/delivery\/check$/, file: "delivery/check.js" },
-  { match: /^\/delivery\/config$/, file: "delivery/config.js" },
-  { match: /^\/payments\/methods$/, file: "payments/methods.js" },
+  { match: /^\/delivery\/config$/, file: "delivery/check.js" },
+  { match: /^\/payments\/methods$/, file: "payments/create.js" },
   { match: /^\/payments\/create$/, file: "payments/create.js" },
   { match: /^\/payments\/verify$/, file: "payments/verify.js" },
   { match: /^\/payments\/cancel$/, file: "payments/cancel.js" },

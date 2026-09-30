@@ -157,6 +157,14 @@ can tell you it is wrong.
 | GET | `/api/admin/orders` | Admin order list, filters, counts, pagination |
 | GET/PATCH | `/api/admin/orders/:orderId` | Order detail, verify a UTR, advance order status, notification audit rows |
 
+Vercel's Hobby plan allows 12 serverless functions per deployment, so
+`/api/delivery/config` is served by `api/delivery/check.js` and
+`/api/payments/methods` by `api/payments/create.js`. Both keep the URL above:
+`vercel.json` rewrites each alias onto the file that also serves the POST route,
+and the handler tells the two requests apart by path. The answers are unchanged —
+the alias is still a public read with no token, and the POST routes still
+require the order's own `X-Order-Token`.
+
 Admin routes require a valid session cookie and fail closed with a 500-style
 `ApiError` when `JOC_ADMIN_SESSION_SECRET` is unset. `/admin` is a real path, not
 a hash route, and `vercel.json` sends `X-Robots-Tag: noindex` on it.
