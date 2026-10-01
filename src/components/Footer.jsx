@@ -1,4 +1,14 @@
-﻿import { ADDRESS, BRAND, LINKS, NAV_LINKS } from "../data/business";
+﻿import { Mail, MessageCircle } from "lucide-react";
+import {
+  ADDRESS,
+  BRAND,
+  CONTACT,
+  DISCLAIMER_FULL,
+  LINKS,
+  MAILTO_URL,
+  NAV_LINKS,
+  WHATSAPP_URL,
+} from "../data/business";
 import styles from "./Footer.module.css";
 
 export default function Footer() {
@@ -47,10 +57,66 @@ export default function Footer() {
               Get directions
             </a>
           </div>
+
+          {/*
+            Contact Us.
+
+            Rendered unconditionally, for every viewport. It was removed from this
+            file in an earlier change, which left a phone user who had scrolled past
+            the contact section with no way to reach anyone: the sticky "Get
+            Directions" bar is a map link and the footer had no contact action.
+
+            The details come from src/data/business.js, the same centralized config
+            the rest of the site reads, so no number is hard-coded here.
+          */}
+          <div className={styles.contact}>
+            <h2 className={styles.colTitle}>Contact Us</h2>
+            <p className={styles.devName}>{CONTACT.name}</p>
+
+            <a
+              className={`btn btn--whatsapp btn--block ${styles.whatsapp}`}
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <MessageCircle size={18} aria-hidden="true" />
+              WhatsApp
+            </a>
+
+            <ul className={styles.links}>
+              {/* The number appears once, as a dial link — not a second WhatsApp
+                  button offering the same action twice. */}
+              <li>
+                <a className={styles.link} href={`tel:${CONTACT.phoneRaw}`}>
+                  <MessageCircle size={15} aria-hidden="true" />
+                  {CONTACT.phoneDisplay}
+                </a>
+              </li>
+              <li>
+                <a className={styles.link} href={MAILTO_URL}>
+                  <Mail size={15} aria-hidden="true" />
+                  {CONTACT.email}
+                </a>
+              </li>
+            </ul>
+
+            <p className={styles.devNote}>
+              {CONTACT.role} — not an official JOC contact.
+            </p>
+          </div>
+        </div>
+
+        <div className={styles.disclaimer}>
+          <p className={styles.disclaimerText}>{DISCLAIMER_FULL}</p>
         </div>
 
         <div className={styles.bottom}>
-          <p>Copyright {year} {BRAND.name}.</p>
+          <p>
+            Copyright {year} {BRAND.name}.
+          </p>
+          <p className={styles.credit}>
+            {CONTACT.role} <strong>{CONTACT.name}</strong>
+          </p>
         </div>
       </div>
     </footer>

@@ -79,6 +79,10 @@
   gap: 0.45rem;
   font-size: var(--fs-sm);
   color: #c3d2c8;
+  /* A phone number or an email address is one long unbreakable token. Without this
+     it forces the column wider than the viewport and the whole page scrolls
+     sideways on a phone. */
+  overflow-wrap: anywhere;
   transition:
     color var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease);
@@ -87,6 +91,18 @@
 .link:hover {
   color: #fff;
   transform: translateX(3px);
+}
+
+.contact {
+  /* Grid and flex children default to min-width:auto, so a long email address
+     would otherwise stretch this column past the container. */
+  min-width: 0;
+}
+
+.whatsapp {
+  /* Full width on a phone, where this is the primary action in the column. It is
+     the existing btn--whatsapp token, not a new colour. */
+  margin-bottom: 0.9rem;
 }
 
 .devName {
@@ -137,7 +153,32 @@
 
 @media (min-width: 720px) {
   .top {
-    grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.7fr) minmax(0, 1.1fr);
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.6fr) minmax(0, 1fr) minmax(0, 0.95fr);
     gap: 2.5rem;
+  }
+}
+
+/*
+  Clear the sticky "Get Directions" bar.
+  -------------------------------------
+  That bar is position:fixed at the bottom of the viewport on every screen under
+  900px, and it becomes visible again as soon as the footer's top edge scrolls into
+  view. Without this the footer's last row — the copyright and the credit line —
+  sits permanently underneath it and cannot be read, and on a short phone the
+  WhatsApp button and email at the bottom of the Contact column are the last thing
+  in the document, so they end up under the bar too.
+
+  This adds the clearance as footer padding rather than hiding the bar, which is
+  the smaller change: the sticky CTA keeps working everywhere else, and the footer
+  is simply long enough that its whole height can be scrolled above the bar.
+
+  5rem covers the bar's padding, the button's own height and the iOS home
+  indicator. env(safe-area-inset-bottom) is added on top so the clearance holds on a
+  notched phone in landscape, where the indicator is not included in the bar's
+  padding either.
+*/
+@media (max-width: 899px) {
+  .footer {
+    padding-bottom: calc(1.5rem + 5rem + env(safe-area-inset-bottom));
   }
 }

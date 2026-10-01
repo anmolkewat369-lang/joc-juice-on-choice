@@ -42,9 +42,10 @@ them work against the in-memory store, so none needs a database or a network.
 | Script | What it pins down |
 | --- | --- |
 | `dev/checkGuards.mjs` | 60 checks over the guard rules: order-token ownership, UTR normalisation, admin auth (unauthenticated, forged cookie, no session secret), status-transition legality, `PAID` reachable only by admin, the checkout field-error contract, area and address-confirmation enforcement, that placing an order makes no outbound call, and that COD never asks the customer to pay online |
-| `dev/checkDelivery.mjs` | 28 checks on the delivery-area rule: the area list is well-formed and duplicate-free, membership is checked after normalising case and whitespace, prototype keys are refused, the confirmation must be exactly `true`, the API refuses a missing/unsupported area and an unconfirmed address, a placed order carries no distance and triggers no outbound request, the browser sends every field the contract can refuse, and **no file under `api/`, `shared/` or `src/` mentions a maps provider, a radius or a coordinate** |
+| `dev/checkDelivery.mjs` | 34 checks on the delivery-area rule: the list is exactly JOC's 22 areas with these labels in this order, every one is accepted by the server and findable by search (commas included), membership is checked after normalising case and whitespace, prototype keys and the previous provisional names are refused, the confirmation must be exactly `true`, a placed order carries no distance and triggers no outbound request, and **no file under `api/`, `shared/` or `src/` mentions a maps provider, a radius or a coordinate** |
 | `dev/checkPostgres.mjs` | 11 checks on the **durable** driver, driven against a stub `pg` pool: `delivery_area` and `delivery_area_confirmed` are in the real `INSERT` with the right values, the customer's name/phone/email/address/landmark/instructions are all still stored, no legacy distance column is written, and a row read back out carries the area, its label, the confirmation, the address and the landmark to the admin |
 | `dev/checkNotifications.mjs` | 17 checks on the send ledger: exactly-once under repeated and concurrent triggers, distinct-status dedupe, skipped-vs-failed recording, a broken provider never failing an order, an unreachable ledger still sending, and the tracking token never appearing in a payload |
+| `dev/checkFooter.mjs` | 9 checks against the **rendered** footer (its Vite SSR bundle, then `react-dom/server`): the Contact Us details, the WhatsApp action and the phone/email tap targets are present, the contact block is not conditional on the viewport and no stylesheet hides it, the sticky "Get Directions" clearance exists at the bar's own breakpoint, long values cannot force a sideways scroll, and the footer still shows every link and line it had before |
 | `dev/checkQr.mjs` | Decodes the server-generated UPI QR with **jsQR** — an independent implementation — across every payload length 1..213, several error-correction levels, and realistic `upi://pay` intent strings |
 
 The QR encoder in `api/_lib/qr.js` is hand-written, so it is deliberately checked
@@ -196,9 +197,11 @@ Email is optional and is never allowed to affect whether an order succeeds.
 - **The admin can see what went out.** The order drawer lists the ledger with
   masked recipients (`a•••••@gmail.com`), so "did they get the message?" is
   answerable on screen without reading logs.
-- **WhatsApp is not configured.** No automated WhatsApp messages are sent. Any
-  future integration requires an official JOC business number and a separate
-  provider implementation.
+- **No automated WhatsApp messages.** JOC sends nothing over WhatsApp by itself.
+  Separately, the site's footer offers a `wa.me` link and the admin drawer offers a
+  "Share on WhatsApp" link, both opened by a person; the admin one is built from
+  `JOC_WHATSAPP_NUMBER` and is hidden when that is unset. A real integration would
+  need an official JOC business number and a provider implementation.
 
 ## Environment
 

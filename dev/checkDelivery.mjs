@@ -47,7 +47,7 @@ delete process.env.DATABASE_URL;
 const checks = [];
 const check = (name, fn) => checks.push([name, fn]);
 
-const ADDRESS = "Plot 42, Dixit Colony, Marhatal, Jabalpur 482002";
+const ADDRESS = "Plot 42, Dixit Colony, Jabalpur 482002";
 
 /* ------------------------------ the harness -------------------------------- */
 
@@ -92,7 +92,7 @@ const checkoutBody = (over = {}) => ({
   name: "Asha Rao",
   phone: "9876543210",
   email: "area-order@example.com",
-  deliveryArea: "marhatal",
+  deliveryArea: "dixit-colony",
   deliveryAreaConfirmed: true,
   address: ADDRESS,
   landmark: "Near the petrol pump",
@@ -109,6 +109,84 @@ const placeOrder = (body, key) =>
   });
 
 /* ------------------------------ the area list ------------------------------ */
+
+/**
+ * JOC's 22 areas, exactly as supplied, in the order supplied.
+ *
+ * Written out here rather than derived, because this is the one list a customer
+ * reads verbatim. If an entry is dropped, renamed, duplicated or reordered, this
+ * check fails and the diff says why — instead of the change shipping quietly as
+ * "the picker looks slightly different".
+ */
+const JOC_AREAS = [
+  "Dixit Colony",
+  "Shri Ram College Rd",
+  "Shri Ram College",
+  "Rajeev Gandhi Nagar",
+  "Karmeta",
+  "Katangi Rd",
+  "Madhotal",
+  "Bhola Chowk",
+  "Thana Madhotal",
+  "Shri Ram Institute of Technology",
+  "Tata Motors, Madhotal",
+  "Rajiv Gandhi Chowk",
+  "Transport Nagar",
+  "Sheetalpuri",
+  "Ranital Lake Jabalpur",
+  "Vijay Nagar",
+  "Kanchan Vihar",
+  "Kachnar City Shiva Temple",
+  "Sanatan Chowk",
+  "Gayatri Temple, Transport Nagar",
+  "Rani Durgavati Museum",
+  "Pisanhari Ki Madiya",
+];
+
+check("the list is JOC's 22 areas, with these labels, in this order", () => {
+  assert.equal(
+    DELIVERY_AREAS.length,
+    JOC_AREAS.length,
+    `expected ${JOC_AREAS.length} areas, found ${DELIVERY_AREAS.length}`,
+  );
+  assert.deepEqual(
+    DELIVERY_AREAS.map((area) => area.name),
+    JOC_AREAS,
+    "the customer-facing labels or their order have changed",
+  );
+});
+
+check("every area is reachable by its own id, and the server accepts all 22", () => {
+  // Walk the real validation path for each one rather than trusting the ids: this
+  // is what proves the API would accept any area the picker offers.
+  for (const name of JOC_AREAS) {
+    const area = DELIVERY_AREAS.find((candidate) => candidate.name === name);
+    assert.ok(area, `${name} is missing from the list`);
+    const result = validateDeliveryArea({
+      deliveryArea: area.id,
+      deliveryAreaConfirmed: true,
+    });
+    assert.equal(result.valid, true, `${area.id} was refused: ${JSON.stringify(result.errors)}`);
+    assert.equal(result.value.areaName, name, `${area.id} must resolve back to "${name}"`);
+  }
+});
+
+check("no area carries a proximity label", () => {
+  // The list is for choosing a place, not for telling a customer how far away it
+  // is. Nothing here may imply a measurement.
+  for (const area of DELIVERY_AREAS) {
+    for (const banned of ["very close", "close", "moderate", "far", "farther", "near", "km"]) {
+      assert.equal(
+        area.name.toLowerCase().includes(banned),
+        false,
+        `"${area.name}" contains "${banned}" — no proximity wording may be shown`,
+      );
+    }
+    assert.equal(area.stars, undefined, `${area.id} must not carry a star rating`);
+    assert.equal(area.proximity, undefined, `${area.id} must not carry a proximity label`);
+    assert.equal(area.distance, undefined, `${area.id} must not carry a distance`);
+  }
+});
 
 check("the configured list is well-formed and free of duplicates", () => {
   assert.ok(Array.isArray(DELIVERY_AREAS), "DELIVERY_AREAS must be an array");
@@ -127,21 +205,31 @@ check("the configured list is well-formed and free of duplicates", () => {
 });
 
 check("an area id is matched after normalising case and whitespace", () => {
-  assert.equal(isDeliveryArea("marhatal"), true);
-  assert.equal(isDeliveryArea("  Marhatal  "), true);
-  assert.equal(isDeliveryArea("MARHATAL"), true);
-  assert.equal(isDeliveryArea("Wright-Town"), true);
-  assert.equal(isDeliveryArea("wright town"), false, "a space is not a hyphen");
+  assert.equal(isDeliveryArea("dixit-colony"), true);
+  assert.equal(isDeliveryArea("  KARMETA  "), true);
+  assert.equal(isDeliveryArea("MADHOTAL"), true);
+  assert.equal(isDeliveryArea("Tata-Motors-Madhotal"), true);
+  // An id, not a name: "Gayatri Temple" normalises to "gayatri temple", which is
+  // not the key "gayatri-temple-transport-nagar".
+  assert.equal(isDeliveryArea("gayatri temple"), false, "a space is not a hyphen");
+  assert.equal(isDeliveryArea("Dixit Colony"), false, "a label is not an id");
 });
 
-check("anything that is not one of JOC's areas is refused", () => {
+check("nothing that is not one of JOC's areas is refused", () => {
   for (const bad of [
     null,
     undefined,
     "",
     "   ",
     "atlantis",
-    "MARHATAL; DROP TABLE joc_orders",
+    "gadarwara",
+    // Names from the previous provisional list: they are no longer offered, so
+    // they must no longer be accepted either.
+    "marhatal",
+    "wright-town",
+    "kanchan-vihar-2",
+    "dixit colony",
+    "MADHOTAL; DROP TABLE joc_orders",
     42,
     {},
     [],
@@ -167,7 +255,7 @@ check("an id that is not in the list resolves to no name", () => {
 });
 
 check("normaliseAreaId collapses junk to the empty string, never to a match", () => {
-  assert.equal(normaliseAreaId("  Wright Town "), "wright town");
+  assert.equal(normaliseAreaId("  Kanchan Vihar "), "kanchan vihar");
   assert.equal(normaliseAreaId(null), "");
   assert.equal(normaliseAreaId(42), "");
   assert.equal(normaliseAreaId({}), "");
@@ -179,13 +267,62 @@ check("an empty search returns every area, so the list is never a blank box", ()
   assert.equal(searchDeliveryAreas("").length, DELIVERY_AREAS.length);
   assert.equal(searchDeliveryAreas("   ").length, DELIVERY_AREAS.length);
   assert.equal(searchDeliveryAreas(null).length, DELIVERY_AREAS.length);
+  assert.equal(searchDeliveryAreas(",").length, DELIVERY_AREAS.length);
+});
+
+check("every one of the 22 areas is findable by searching for its own name", () => {
+  for (const area of DELIVERY_AREAS) {
+    const found = searchDeliveryAreas(area.name);
+    assert.ok(
+      found.some((match) => match.id === area.id),
+      `searching "${area.name}" did not find ${area.id}`,
+    );
+  }
 });
 
 check("search finds an area by part of its name, ignoring case", () => {
-  const found = searchDeliveryAreas("marh").map((area) => area.id);
-  assert.ok(found.includes("marhatal"));
-  assert.ok(found.includes("dixit-colony") === false || true);
-  assert.equal(searchDeliveryAreas("WRIGHT").some((a) => a.id === "wright-town"), true);
+  assert.ok(searchDeliveryAreas("madh").map((a) => a.id).includes("madhotal"));
+  assert.ok(searchDeliveryAreas("MADH").map((a) => a.id).includes("madhotal"));
+  // "rd" reaches both roads, and does not reorder them.
+  const roads = searchDeliveryAreas("rd").map((a) => a.id);
+  assert.deepEqual(roads, ["shri-ram-college-rd", "katangi-rd"]);
+  // Both temple entries, and both transport-nagar entries, are reachable by word.
+  assert.equal(searchDeliveryAreas("temple").length, 2);
+  assert.equal(searchDeliveryAreas("transport nagar").length, 2);
+});
+
+check("a search that matches a comma keeps working", () => {
+  // The two labels that contain a comma are the easiest thing to break: the query
+  // and the name must be folded the same way, or "Tata Motors, Madhotal" becomes
+  // unsearchable by its own name.
+  assert.ok(
+    searchDeliveryAreas("Tata Motors, Madhotal").some((a) => a.id === "tata-motors-madhotal"),
+    "the comma form must match",
+  );
+  assert.ok(
+    searchDeliveryAreas("Tata Motors Madhotal").some((a) => a.id === "tata-motors-madhotal"),
+    "the punctuation-free form must match too",
+  );
+  assert.ok(
+    searchDeliveryAreas("Gayatri Temple, Transport Nagar").some(
+      (a) => a.id === "gayatri-temple-transport-nagar",
+    ),
+    "the comma form must match",
+  );
+});
+
+check("search results keep the configured order", () => {
+  // Filtering must narrow the list, never reshuffle it: the order is what JOC
+  // chose and what the customer has already seen.
+  const order = DELIVERY_AREAS.map((area) => area.id);
+  for (const query of ["nagar", "temple", "ram", "chowk", "rd"]) {
+    const found = searchDeliveryAreas(query).map((area) => area.id);
+    assert.deepEqual(
+      found,
+      order.filter((id) => found.includes(id)),
+      `searching "${query}" reordered the list`,
+    );
+  }
 });
 
 check("a search that matches nothing returns an empty list, not everything", () => {
@@ -211,12 +348,12 @@ check("the acknowledgement wording is fixed and shared", () => {
 
 check("a valid area plus a real confirmation passes", () => {
   const result = validateDeliveryArea({
-    deliveryArea: "marhatal",
+    deliveryArea: "dixit-colony",
     deliveryAreaConfirmed: true,
   });
   assert.equal(result.valid, true, JSON.stringify(result.errors));
-  assert.equal(result.value.area, "marhatal");
-  assert.equal(result.value.areaName, "Marhatal", "the label comes from the list");
+  assert.equal(result.value.area, "dixit-colony");
+  assert.equal(result.value.areaName, "Dixit Colony", "the label comes from the list");
   assert.equal(result.value.confirmed, true);
 });
 
@@ -238,7 +375,7 @@ check("an unsupported area is refused without naming what JOC does not serve", (
 check("the confirmation must be exactly true", () => {
   // Everything below is what a naive `if (value)` would accept.
   for (const bad of [false, undefined, null, "true", "on", "yes", 1, {}, []]) {
-    const result = validateDeliveryArea({ deliveryArea: "marhatal", deliveryAreaConfirmed: bad });
+    const result = validateDeliveryArea({ deliveryArea: "dixit-colony", deliveryAreaConfirmed: bad });
     assert.equal(
       result.valid,
       false,
@@ -271,12 +408,12 @@ check("checkout validation requires the area and the confirmation", () => {
 
   const complete = validateCheckout({
     ...base,
-    deliveryArea: "marhatal",
+    deliveryArea: "dixit-colony",
     deliveryAreaConfirmed: true,
   });
   assert.equal(complete.valid, true, JSON.stringify(complete.errors));
-  assert.equal(complete.value.deliveryArea, "marhatal");
-  assert.equal(complete.value.deliveryAreaName, "Marhatal");
+  assert.equal(complete.value.deliveryArea, "dixit-colony");
+  assert.equal(complete.value.deliveryAreaName, "Dixit Colony");
   assert.equal(complete.value.deliveryAreaConfirmed, true);
 });
 
@@ -287,23 +424,23 @@ check("an order's area label is resolved from the list, never from the request",
     address: ADDRESS,
     paymentMethod: "COD",
     items: [{ id: "paneer-momos", qty: 1 }],
-    deliveryArea: "marhatal",
+    deliveryArea: "dixit-colony",
     deliveryAreaConfirmed: true,
     deliveryAreaName: "ATTACKER CHOSEN LABEL",
   });
   assert.equal(result.valid, true);
-  assert.equal(result.value.deliveryAreaName, "Marhatal", "a submitted label must be ignored");
+  assert.equal(result.value.deliveryAreaName, "Dixit Colony", "a submitted label must be ignored");
 });
 
 /* --------------------------- presentation helpers ------------------------- */
 
 check("an order's area is labelled honestly, including a legacy one", () => {
   assert.equal(
-    deliveryAreaStatusLabel({ deliveryArea: "marhatal", deliveryAreaConfirmed: true }),
+    deliveryAreaStatusLabel({ deliveryArea: "dixit-colony", deliveryAreaConfirmed: true }),
     "Confirmed by customer",
   );
   assert.match(
-    deliveryAreaStatusLabel({ deliveryArea: "marhatal", deliveryAreaConfirmed: false }),
+    deliveryAreaStatusLabel({ deliveryArea: "dixit-colony", deliveryAreaConfirmed: false }),
     /pending/i,
   );
   assert.equal(
@@ -311,7 +448,7 @@ check("an order's area is labelled honestly, including a legacy one", () => {
     "Not recorded",
     "an order placed before the area list must not look confirmed",
   );
-  assert.match(deliveryAreaSummary({ deliveryArea: "marhatal", deliveryAreaConfirmed: true }), /confirmed/);
+  assert.match(deliveryAreaSummary({ deliveryArea: "dixit-colony", deliveryAreaConfirmed: true }), /confirmed/);
   assert.match(deliveryAreaSummary({}), /no area/i);
 });
 
@@ -343,8 +480,8 @@ check("a valid order is stored with its area and confirmation", async () => {
   _resetStoreCache();
   const res = await placeOrder(checkoutBody(), "area-ok-0001");
   assert.equal(res.statusCode, 201, JSON.stringify(res.payload));
-  assert.equal(res.payload.order.deliveryArea, "marhatal");
-  assert.equal(res.payload.order.deliveryAreaName, "Marhatal");
+  assert.equal(res.payload.order.deliveryArea, "dixit-colony");
+  assert.equal(res.payload.order.deliveryAreaName, "Dixit Colony");
   assert.equal(res.payload.order.deliveryAreaConfirmed, true);
   assert.equal(res.payload.order.orderStatus, "RECEIVED", "JOC confirms delivery afterwards");
 });
@@ -390,7 +527,7 @@ check("no response or stored order carries a measured distance", async () => {
   }
 
   const row = await store.getOrder(res.payload.order.orderId);
-  assert.equal(row.delivery_area, "marhatal");
+  assert.equal(row.delivery_area, "dixit-colony");
   assert.equal(row.delivery_area_confirmed, true);
   for (const column of [
     "delivery_distance_meters",

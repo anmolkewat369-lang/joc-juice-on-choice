@@ -55,10 +55,10 @@ const insertedRow = {
   // column. The stored form is E.164, not the 10 digits the customer typed.
   phone: "+919876543210",
   customer_email: "asha@example.com",
-  address: "Plot 42, Dixit Colony, Marhatal, Jabalpur 482002",
+  address: "Plot 42, Dixit Colony, Jabalpur 482002",
   landmark: "Near the petrol pump",
   special_instructions: "Less spicy, no coriander",
-  delivery_area: "marhatal",
+  delivery_area: "dixit-colony",
   delivery_area_confirmed: true,
   // Present in the table, and never written by the application: the read-only
   // history of the old road-distance rule.
@@ -136,10 +136,10 @@ const buildRecord = (over = {}) =>
     name: "Asha Rao",
     phone: "9876543210",
     email: "asha@example.com",
-    address: "Plot 42, Dixit Colony, Marhatal, Jabalpur 482002",
+    address: "Plot 42, Dixit Colony, Jabalpur 482002",
     landmark: "Near the petrol pump",
     instructions: "Less spicy, no coriander",
-    deliveryArea: "marhatal",
+    deliveryArea: "dixit-colony",
     deliveryAreaConfirmed: true,
     items: [{ id: "paneer-momos", qty: 2 }],
     paymentMethod: "COD",
@@ -175,8 +175,8 @@ check("the durable driver is the one under test", () => {
 });
 
 check("the record the route hands over already carries the area", () => {
-  assert.equal(record.deliveryArea, "marhatal");
-  assert.equal(record.deliveryAreaName, "Marhatal");
+  assert.equal(record.deliveryArea, "dixit-colony");
+  assert.equal(record.deliveryAreaName, "Dixit Colony");
   assert.equal(record.deliveryAreaConfirmed, true);
 });
 
@@ -194,7 +194,7 @@ check("the area and its confirmation reach the INSERT", () => {
     params.length,
     "the column list and the parameter list have drifted apart",
   );
-  assert.equal(valueFor("delivery_area"), "marhatal");
+  assert.equal(valueFor("delivery_area"), "dixit-colony");
   assert.equal(valueFor("delivery_area_confirmed"), true);
 });
 
@@ -202,7 +202,7 @@ check("the customer's own details are all still stored", () => {
   assert.equal(valueFor("customer_name"), "Asha Rao");
   assert.equal(valueFor("phone"), "+919876543210");
   assert.equal(valueFor("customer_email"), "asha@example.com");
-  assert.equal(valueFor("address"), "Plot 42, Dixit Colony, Marhatal, Jabalpur 482002");
+  assert.equal(valueFor("address"), "Plot 42, Dixit Colony, Jabalpur 482002");
   assert.equal(valueFor("landmark"), "Near the petrol pump");
   assert.equal(valueFor("special_instructions"), "Less spicy, no coriander");
   assert.equal(valueFor("payment_method"), "COD");
@@ -230,11 +230,11 @@ check("no legacy distance column is written", () => {
 
 check("the row read back carries the area to the admin", () => {
   const admin = toAdminOrder(insertedRow);
-  assert.equal(admin.deliveryArea, "marhatal");
-  assert.equal(admin.deliveryAreaName, "Marhatal", "the label is resolved from the list");
+  assert.equal(admin.deliveryArea, "dixit-colony");
+  assert.equal(admin.deliveryAreaName, "Dixit Colony", "the label is resolved from the list");
   assert.equal(admin.deliveryAreaConfirmed, true);
   // Everything the admin needs to decide whether this order can be delivered.
-  assert.equal(admin.address, "Plot 42, Dixit Colony, Marhatal, Jabalpur 482002");
+  assert.equal(admin.address, "Plot 42, Dixit Colony, Jabalpur 482002");
   assert.equal(admin.landmark, "Near the petrol pump");
   assert.equal(admin.customerName, "Asha Rao");
   assert.equal(admin.phone, "+919876543210");
@@ -246,8 +246,8 @@ check("the row read back carries the area to the admin", () => {
 
 check("the customer's own order view shows the area too", () => {
   const pub = toPublicOrder(insertedRow);
-  assert.equal(pub.deliveryArea, "marhatal");
-  assert.equal(pub.deliveryAreaName, "Marhatal");
+  assert.equal(pub.deliveryArea, "dixit-colony");
+  assert.equal(pub.deliveryAreaName, "Dixit Colony");
   assert.equal(pub.deliveryAreaConfirmed, true);
 });
 

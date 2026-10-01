@@ -705,7 +705,7 @@ check("the confirmation must be a real boolean, not a truthy string", withUpiEnv
 check("the customer cannot supply their own area label", withUpiEnv(async () => {
   const res = await placeOrder(
     checkoutBody("COD", {
-      deliveryArea: "marhatal",
+      deliveryArea: "dixit-colony",
       deliveryAreaName: "Nowhere Special",
     }),
     "guard-area-name-1",
@@ -713,12 +713,12 @@ check("the customer cannot supply their own area label", withUpiEnv(async () => 
   assert.equal(res.statusCode, 201);
   assert.equal(
     res.payload.order.deliveryArea,
-    "marhatal",
+    "dixit-colony",
     "the id comes from the request and is checked against the list",
   );
   assert.equal(
     res.payload.order.deliveryAreaName,
-    "Marhatal",
+    "Dixit Colony",
     "the label is resolved from the configured list, never from the request",
   );
 }));
@@ -756,9 +756,9 @@ const checkoutBody = (paymentMethod, over = {}) => ({
   // the address. These two fields are part of the baseline fixture rather than
   // something each check adds, so a check that is not about delivery still
   // exercises a valid submission.
-  deliveryArea: "marhatal",
+  deliveryArea: "dixit-colony",
   deliveryAreaConfirmed: true,
-  address: "Plot 42, Dixit Colony, Marhatal, Jabalpur 482002",
+  address: "Plot 42, Dixit Colony, Jabalpur 482002",
   landmark: "Opposite Toit",
   instructions: "Less ice",
   // Priced from the real menu, not a fixture: 159 x 2 = 318, delivery 0.

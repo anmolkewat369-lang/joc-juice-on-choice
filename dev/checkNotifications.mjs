@@ -99,7 +99,7 @@ const withMailEnv = (over, fn) => async () => {
 const checks = [];
 const check = (name, fn) => checks.push([name, fn]);
 
-const ADDRESS = "Plot 42, Civil Lines, Jabalpur 482001";
+const ADDRESS = "Plot 42, Sanatan Chowk, Jabalpur 482001";
 
 const baseRecord = (over = {}) => ({
   customerName: "Asha Rao",
@@ -107,7 +107,7 @@ const baseRecord = (over = {}) => ({
   customerEmail: "asha@example.com",
   // The area the customer chose and their confirmation of the address. No
   // distance: nothing measures one, so there is nothing to store or report.
-  deliveryArea: "civil-lines",
+  deliveryArea: "sanatan-chowk",
   deliveryAreaConfirmed: true,
   address: ADDRESS,
   landmark: "Near the petrol pump",
@@ -147,7 +147,7 @@ check("the admin summary reports the chosen area and the confirmation", async ()
   const text = orderSummaryText(toAdminOrder(row));
   // The area is shown by its label, not its slug: this message is read on a phone
   // by whoever is doing the delivery run, not by a developer with the source open.
-  assert.match(text, /Civil Lines/, "the admin plans a run from this area");
+  assert.match(text, /Sanatan Chowk/, "the admin plans a run from this area");
   assert.match(text, /address confirmed/, "and knows the customer confirmed the address");
   assert.match(text, /JOC-/, "the order id must be in the message");
   // The old summary told the admin a measured road distance. Nothing measures one
@@ -162,7 +162,7 @@ check("an order placed before the area list says so, rather than guessing", asyn
     "content-unverified-1",
   );
   const text = orderSummaryText(toAdminOrder(row));
-  assert.equal(text.includes("civil-lines"), false, "no area may be invented for it");
+  assert.equal(text.includes("sanatan-chowk"), false, "no area may be invented for it");
   assert.match(text, /No area recorded/, "the admin is told to confirm the address");
   assert.equal(whatsappLink(toAdminOrder(row)), null, "no WhatsApp number is configured here");
 });
