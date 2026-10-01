@@ -39,6 +39,10 @@ const ROUTES = [
   { match: /^\/admin\/session$/, file: "admin/session.js" },
   { match: /^\/admin\/orders$/, file: "admin/orders/index.js" },
   { match: /^\/admin\/orders\/[^/]+$/, file: "admin/orders/[orderId].js" },
+  // One handler, many actions (session/signup/login/logout/forgot/reset/orders).
+  // The `[action]` segment is surfaced into req.query by `decorate` below.
+  { match: /^\/customer\/[^/]+$/, file: "customer/[action].js" },
+  { match: /^\/push\/subscribe$/, file: "push/subscribe.js" },
 ];
 
 function routeFor(url) {

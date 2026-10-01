@@ -26,6 +26,7 @@ import { appendOrderEvent } from "./orderEvents.js";
 import { isOrderId } from "./orderToken.js";
 import { ApiError } from "./http.js";
 import { notifyOrderStatus, notifyPaymentVerified } from "./notify.js";
+import { notifyCustomerOrderConfirmedPush } from "./push.js";
 
 export { isOrderId } from "./orderToken.js";
 /* --------------------------------- filters ------------------------------- */
@@ -200,6 +201,15 @@ export async function changeOrderStatus(store, orderId, nextStatus, admin, { not
   // now block the retry from ever telling them. Awawnted rather than fire-and-
   // forget so the send is not abandoned when the function returns.
   await notifyOrderStatus(store, updated);
+
+  // Web Push is a second channel for the same transition, not a replacement for
+  // the email above. Only CONFIRMED is wired now; the helper is event-driven, so
+  // extending it to PREPARING/READY/… later is one line here. It is awaited so
+  // the send is not abandoned when the function returns, and it is incapable of
+  // throwing or of failing the status change that already succeeded.
+  if (nextStatus === ORDER_STATUS.CONFIRMED) {
+    await notifyCustomerOrderConfirmedPush(store, updated);
+  }
 
   return { order: toAdminOrder(updated), changed: true };
 }

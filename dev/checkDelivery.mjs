@@ -44,6 +44,15 @@ import { PAYMENT_METHOD } from "../shared/ordering.js";
 process.env.JOC_ALLOW_MEMORY_STORE = "true";
 delete process.env.DATABASE_URL;
 
+// Ordering requires a signed-in customer, so the suite signs one in through the
+// real session machinery rather than bypassing `requireCustomer`.
+process.env.JOC_CUSTOMER_SESSION_SECRET =
+  "a-customer-test-secret-that-is-long-enough-xxxx";
+const { createCustomerSession } = await import("../api/_lib/customerAuth.js");
+const CUSTOMER_COOKIE = `joc_customer_session=${
+  createCustomerSession({ id: "cust-test-user-1", email: "area-order@example.com" }).token
+}`;
+
 const checks = [];
 const check = (name, fn) => checks.push([name, fn]);
 
@@ -104,7 +113,7 @@ const checkoutBody = (over = {}) => ({
 const placeOrder = (body, key) =>
   callRoute("../api/orders/index.js", {
     method: "POST",
-    headers: { "idempotency-key": key },
+    headers: { "idempotency-key": key, cookie: CUSTOMER_COOKIE },
     body,
   });
 

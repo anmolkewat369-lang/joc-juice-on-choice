@@ -32,6 +32,20 @@ import { orderSummaryText, whatsappLink } from "../api/_lib/notify.js";
 process.env.JOC_ALLOW_MEMORY_STORE = "true";
 delete process.env.DATABASE_URL;
 
+/*
+ * Placing an order now requires a signed-in customer, so the suite signs one in
+ * the same way the server does: a domain-separated signed session cookie. The
+ * secret is long enough to satisfy the real guard, and the cookie is attached to
+ * every request that posts an order. Nothing here shortcuts `requireCustomer` —
+ * a check that forgot the cookie would fail with a 401, which is the point.
+ */
+process.env.JOC_CUSTOMER_SESSION_SECRET =
+  "a-customer-test-secret-that-is-long-enough-xxxx";
+const { createCustomerSession } = await import("../api/_lib/customerAuth.js");
+const CUSTOMER_COOKIE = `joc_customer_session=${
+  createCustomerSession({ id: "cust-test-user-1", email: "asha@example.com" }).token
+}`;
+
 /* --------------------------- No provider to stub ---------------------------- */
 
 /**
@@ -770,7 +784,7 @@ const checkoutBody = (paymentMethod, over = {}) => ({
 const placeOrder = (body, idempotencyKey) =>
   callRoute("../api/orders/index.js", {
     method: "POST",
-    headers: { "idempotency-key": idempotencyKey },
+    headers: { "idempotency-key": idempotencyKey, cookie: CUSTOMER_COOKIE },
     body,
   });
 

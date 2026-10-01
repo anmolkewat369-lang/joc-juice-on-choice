@@ -113,10 +113,10 @@ function createPostgresStore() {
            idempotency_key, access_hash, customer_name, phone, customer_email,
            address, landmark, special_instructions,
            delivery_area, delivery_area_confirmed,
-           tracking_token,
+           tracking_token, customer_user_id,
            items, subtotal, delivery_charge, total, currency,
            payment_method, payment_status, order_status, payment_provider
-         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20)
+         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,$17,$18,$19,$20,$21)
          on conflict (idempotency_key) do nothing
          returning *`,
         [
@@ -135,6 +135,9 @@ function createPostgresStore() {
           record.deliveryArea ?? null,
           record.deliveryAreaConfirmed ?? null,
           record.trackingToken ?? null,
+          // The owning Supabase user id, derived server-side from a validated
+          // session. NULL for an anonymous/legacy order. Never from the body.
+          record.customerUserId ?? null,
           JSON.stringify(record.items),
           record.subtotal,
           record.deliveryCharge,
@@ -175,6 +178,24 @@ function createPostgresStore() {
         orderId,
       ]);
       return rows[0] ?? null;
+    },
+
+    /**
+     * The authenticated customer's own orders, newest first.
+     *
+     * Filtering is by `customer_user_id`, which only ever comes from a session
+     * this server validated. There is no query path that selects orders by a
+     * client-supplied id, email or phone.
+     */
+    async listOrdersByCustomer(userId, { limit = 50, offset = 0 } = {}) {
+      const { rows } = await run(
+        `select * from joc_orders
+          where customer_user_id = $1
+          order by created_at desc, order_seq desc
+          limit $2 offset $3`,
+        [String(userId), limit, offset],
+      );
+      return rows;
     },
 
     /**
@@ -469,6 +490,120 @@ function createPostgresStore() {
       return rows;
     },
 
+    /* ------------------------------ push ------------------------------------ */
+
+    /**
+     * Store or refresh a browser push subscription.
+     *
+     * The conflict target is `endpoint`, which is globally unique: the same
+     * browser signing in as a different user reassigns its one row instead of
+     * creating a second. `role` and `user_id` are both server-derived, so a
+     * browser cannot claim a role it does not have.
+     */
+    async upsertPushSubscription({ userId, role, endpoint, p256dh, auth, userAgent = null }) {
+      const { rows } = await run(
+        `insert into joc_push_subscriptions (user_id, role, endpoint, p256dh, auth, user_agent)
+         values ($1,$2,$3,$4,$5,$6)
+         on conflict (endpoint) do update
+            set user_id    = excluded.user_id,
+                role       = excluded.role,
+                p256dh     = excluded.p256dh,
+                auth       = excluded.auth,
+                user_agent = excluded.user_agent,
+                updated_at = now()
+         returning *`,
+        [String(userId), role, endpoint, p256dh, auth, userAgent],
+      );
+      return rows[0] ?? null;
+    },
+
+    async listPushSubscriptions({ role, userId }) {
+      const { rows } = await run(
+        `select * from joc_push_subscriptions
+          where role = $1 and user_id = $2
+          order by created_at`,
+        [role, String(userId)],
+      );
+      return rows;
+    },
+
+    /** Every subscription for a role. Used only for the admin new-order fan-out. */
+    async listPushSubscriptionsByRole(role, { limit = 200 } = {}) {
+      const { rows } = await run(
+        `select * from joc_push_subscriptions where role = $1 order by created_at limit $2`,
+        [role, limit],
+      );
+      return rows;
+    },
+
+    async deletePushSubscription(id) {
+      await run(`delete from joc_push_subscriptions where id = $1`, [id]);
+    },
+
+    async deletePushSubscriptionByEndpoint(endpoint) {
+      await run(`delete from joc_push_subscriptions where endpoint = $1`, [endpoint]);
+    },
+
+    async markPushSubscriptionUsed(id) {
+      await run(`update joc_push_subscriptions set last_used_at = now() where id = $1`, [id]);
+    },
+
+    /**
+     * Claim the right to send one push, or report that someone else already has.
+     *
+     * Mirrors `claimNotification`: the insert is the lock, the unique constraint
+     * resolves a concurrent race, and a FAILED row may be retried a bounded
+     * number of times. A 'sent' row is never taken over, which is what stops a
+     * repeated CONFIRMED from sending a second push.
+     */
+    async claimPushDelivery({ orderUuid, orderRef, event, subscriptionId, leaseSeconds = 60 }) {
+      const { rows } = await run(
+        `insert into joc_push_deliveries (
+           order_uuid, order_ref, event, subscription_id, attempts
+         ) values ($1,$2,$3,$4,1)
+         on conflict (order_uuid, event, subscription_id) do nothing
+         returning *`,
+        [orderUuid, orderRef, event, subscriptionId],
+      );
+      if (rows.length > 0) return { claimed: true, delivery: rows[0] };
+
+      const taken = await run(
+        `update joc_push_deliveries
+            set status     = 'pending',
+                attempts   = attempts + 1,
+                last_error = null,
+                updated_at = now()
+          where id = (
+                  select id from joc_push_deliveries
+                   where order_uuid = $1
+                     and event = $2
+                     and subscription_id = $3
+                     and (
+                       status = 'failed'
+                       or (status = 'pending' and updated_at < now() - make_interval(secs => $4))
+                     )
+                     and attempts < $5
+                 )
+          returning *`,
+        [orderUuid, event, subscriptionId, leaseSeconds, NOTIFICATION_MAX_ATTEMPTS],
+      );
+      if (taken.rows.length > 0) return { claimed: true, delivery: taken.rows[0] };
+      return { claimed: false };
+    },
+
+    async completePushDelivery(id, status, error = null) {
+      const { rows } = await run(
+        `update joc_push_deliveries
+            set status     = $2,
+                last_error = $3,
+                updated_at = now()
+          where id = $1 and status = 'pending'
+          returning *`,
+        [id, status, error === null ? null : String(error).slice(0, 500)],
+      );
+      return rows[0] ?? null;
+    },
+
     /**
      * Guarded admin write. Only the columns an admin action is allowed to
      * change are writable, and PAID is only reachable together with
@@ -533,6 +668,7 @@ const toRow = (record) => ({
   delivery_area: record.deliveryArea ?? null,
   delivery_area_confirmed: record.deliveryAreaConfirmed ?? null,
   tracking_token: record.trackingToken ?? null,
+  customer_user_id: record.customerUserId ?? null,
   items: record.items,
   subtotal: record.subtotal,
   delivery_charge: record.deliveryCharge,
@@ -573,8 +709,12 @@ function createMemoryStore() {
   const byKey = new Map(); // idempotencyKey -> orderId
   const events = []; // append-only audit trail
   const notifications = new Map(); // id -> row
+  const pushSubscriptions = new Map(); // endpoint -> row
+  const pushDeliveries = new Map(); // orderUuid|event|subscriptionId -> row
   let sequence = 0;
   let notificationSequence = 0;
+  let subscriptionSequence = 0;
+  let pushDeliverySequence = 0;
 
   /**
    * The same claim/complete contract as the Postgres driver, against a Map.
@@ -789,6 +929,121 @@ function createMemoryStore() {
         .sort((a, b) => a.id - b.id);
     },
 
+    async listOrdersByCustomer(userId, { limit = 50, offset = 0 } = {}) {
+      const matches = [...orders.values()]
+        .filter((row) => row.customer_user_id === String(userId))
+        .sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at) || b.order_seq - a.order_seq,
+        );
+      return matches.slice(offset, offset + limit);
+    },
+
+    /* ------------------------------ push ------------------------------------ */
+
+    async upsertPushSubscription({ userId, role, endpoint, p256dh, auth, userAgent = null }) {
+      const stamp = () => new Date().toISOString();
+      const existing = pushSubscriptions.get(endpoint);
+      if (existing) {
+        existing.user_id = String(userId);
+        existing.role = role;
+        existing.p256dh = p256dh;
+        existing.auth = auth;
+        existing.user_agent = userAgent;
+        existing.updated_at = stamp();
+        return existing;
+      }
+      subscriptionSequence += 1;
+      const row = {
+        id: subscriptionSequence,
+        user_id: String(userId),
+        role,
+        endpoint,
+        p256dh,
+        auth,
+        user_agent: userAgent,
+        created_at: stamp(),
+        updated_at: stamp(),
+        last_used_at: null,
+      };
+      pushSubscriptions.set(endpoint, row);
+      return row;
+    },
+
+    async listPushSubscriptions({ role, userId }) {
+      return [...pushSubscriptions.values()]
+        .filter((row) => row.role === role && row.user_id === String(userId))
+        .sort((a, b) => a.id - b.id);
+    },
+
+    async listPushSubscriptionsByRole(role, { limit = 200 } = {}) {
+      return [...pushSubscriptions.values()]
+        .filter((row) => row.role === role)
+        .sort((a, b) => a.id - b.id)
+        .slice(0, limit);
+    },
+
+    async deletePushSubscription(id) {
+      for (const [endpoint, row] of pushSubscriptions) {
+        if (row.id === id) pushSubscriptions.delete(endpoint);
+      }
+    },
+
+    async deletePushSubscriptionByEndpoint(endpoint) {
+      pushSubscriptions.delete(endpoint);
+    },
+
+    async markPushSubscriptionUsed(id) {
+      for (const row of pushSubscriptions.values()) {
+        if (row.id === id) row.last_used_at = new Date().toISOString();
+      }
+    },
+
+    async claimPushDelivery({ orderUuid, orderRef, event, subscriptionId }) {
+      const key = `${orderUuid}|${event}|${subscriptionId}`;
+      const now = Date.now();
+      const existing = pushDeliveries.get(key);
+      if (existing) {
+        const stalePending =
+          existing.status === "pending" &&
+          new Date(existing.updated_at).getTime() + 60_000 <= now;
+        const retryable = existing.status === "failed" || stalePending;
+        if (!retryable || existing.attempts >= NOTIFICATION_MAX_ATTEMPTS) {
+          return { claimed: false };
+        }
+        existing.status = "pending";
+        existing.attempts += 1;
+        existing.last_error = null;
+        existing.updated_at = new Date(now).toISOString();
+        return { claimed: true, delivery: existing };
+      }
+      pushDeliverySequence += 1;
+      const row = {
+        id: pushDeliverySequence,
+        order_uuid: orderUuid,
+        order_ref: orderRef,
+        event,
+        subscription_id: subscriptionId,
+        status: "pending",
+        attempts: 1,
+        last_error: null,
+        created_at: new Date(now).toISOString(),
+        updated_at: new Date(now).toISOString(),
+      };
+      pushDeliveries.set(key, row);
+      return { claimed: true, delivery: row };
+    },
+
+    async completePushDelivery(id, status, error = null) {
+      for (const row of pushDeliveries.values()) {
+        if (row.id !== id || row.status !== "pending") continue;
+        row.status = status;
+        row.last_error = error === null ? null : String(error).slice(0, 500);
+        row.updated_at = new Date().toISOString();
+        return row;
+      }
+      return null;
+    },
+
     async adminUpdateOrder(
       orderId,
       {
@@ -958,6 +1213,24 @@ export const toPublicOrder = (row) => {
   return {
     ...rest,
     razorpayPaymentRef: razorpayPaymentId ? maskReference(razorpayPaymentId) : null,
+  };
+};
+
+/**
+ * Shape sent to an authenticated customer for their OWN order.
+ *
+ * Identical to the public shape plus the per-order tracking secret, and that
+ * addition is deliberate: My Orders lets a signed-in customer open any of their
+ * orders on a device that never placed it, and the existing tracking route
+ * (`#/order/<id>?t=<token>`) is what "View Order" reuses. The secret is
+ * owner-only — it is produced exclusively by the customer API, which has already
+ * proved the session owns the order — and never appears in `toPublicOrder`.
+ */
+export const toCustomerOrder = (row) => {
+  if (!row) return null;
+  return {
+    ...toPublicOrder(row),
+    trackingToken: readTrackingToken(row),
   };
 };
 

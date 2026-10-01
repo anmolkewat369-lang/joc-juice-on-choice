@@ -34,11 +34,19 @@ import { rateLimit, sweepRateLimits } from "../_lib/rateLimit.js";
 import { paymentViewFor } from "../_lib/payments.js";
 import { orderCreatedEvent, recordEventQuietly } from "../_lib/orderEvents.js";
 import { notifyNewOrder, notifyOrderReceived } from "../_lib/notify.js";
+import { requireCustomer } from "../_lib/customerAuth.js";
+import { notifyAdminNewOrderPush } from "../_lib/push.js";
 
 export default async function handler(req, res) {
   if (!methodGuard(req, res, "POST")) return;
 
   try {
+    // Ordering requires an account. The identity is read from the signed
+    // httpOnly cookie and nothing else — a `customer_user_id` in the body is
+    // ignored, because `buildOrderRecord` never reads one from the request. This
+    // is also what lets the order appear under My Orders.
+    const customer = requireCustomer(req);
+
     sweepRateLimits();
     // Generous enough for a shared campus/office IP, tight enough to stop a flood.
     const gate = rateLimit({ key: `order:${clientKey(req)}`, limit: 20, windowMs: 60_000 });
@@ -82,7 +90,7 @@ export default async function handler(req, res) {
     // the configured list and the explicit confirmation is required, so a payload
     // that skips either never reaches persistence. Everything the record carries
     // about delivery comes from here, already checked.
-    const record = buildOrderRecord(body);
+    const record = buildOrderRecord(body, { customerUserId: customer.id });
 
     // (3) Persist. The first thing that exists as a consequence of this request.
     const { order, created } = await store.createOrder(record, idempotencyKey);
@@ -99,6 +107,10 @@ export default async function handler(req, res) {
       // already incapable of throwing, so this costs correctness nothing.
       await recordEventQuietly(store, order, orderCreatedEvent(order, { provider: record.paymentProvider }));
       await notifyNewOrder(store, order);
+      // A second, independent admin channel. Additive and never able to fail the
+      // order: notifyAdminNewOrderPush catches everything internally, exactly as
+      // the email channels do.
+      await notifyAdminNewOrderPush(store, order);
       await notifyOrderReceived(store, order);
     }
 

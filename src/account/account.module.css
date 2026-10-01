@@ -1,0 +1,288 @@
+.page {
+  min-height: 60vh;
+  padding-top: calc(var(--nav-h) + 3rem);
+}
+
+.wrap {
+  max-width: 620px;
+}
+
+.wide {
+  max-width: 880px;
+}
+
+.head {
+  margin-bottom: 1.5rem;
+}
+
+.title {
+  font-family: var(--font-head);
+  font-size: var(--fs-h3);
+  margin: 0 0 0.35rem;
+}
+
+.lead {
+  color: var(--ink-600);
+  margin: 0;
+}
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: clamp(1.25rem, 1rem + 1.5vw, 2rem);
+}
+
+.form {
+  display: grid;
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.label {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--ink-800);
+}
+
+.input {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font: inherit;
+  color: var(--ink-900);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--green-500);
+  box-shadow: var(--ring);
+}
+
+.inputInvalid {
+  border-color: var(--berry-500);
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--ink-500);
+  margin: 0;
+}
+
+.error {
+  font-size: var(--fs-xs);
+  color: var(--berry-600);
+  margin: 0;
+}
+
+.actions {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+}
+
+.linkRow {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: var(--fs-sm);
+}
+
+.link {
+  color: var(--green-700);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.alert {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: #fdecec;
+  color: var(--berry-600);
+  font-size: var(--fs-sm);
+  margin: 0;
+}
+
+.success {
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--paper-tint);
+  border: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+
+.muted {
+  color: var(--ink-500);
+}
+
+.split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.orders {
+  display: grid;
+  gap: 1rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.orderCard {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  padding: 1rem 1.1rem;
+}
+
+.orderHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+}
+
+.orderId {
+  font-family: var(--font-head);
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.orderDate {
+  font-size: var(--fs-xs);
+  color: var(--ink-500);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.6rem 0;
+}
+
+.badge {
+  font-size: var(--fs-xs);
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  background: var(--paper-tint);
+  color: var(--ink-600);
+}
+
+.badgePaid {
+  background: #e9f7e8;
+  border-color: #bfe6bb;
+  color: var(--green-700);
+}
+
+.badgeWarn {
+  background: #fff4e6;
+  border-color: #ffd9ad;
+  color: var(--orange-600);
+}
+
+.orderItems {
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+}
+
+.orderItems li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0;
+}
+
+.totals {
+  margin: 0.5rem 0;
+  display: grid;
+  gap: 0.15rem;
+  font-size: var(--fs-sm);
+}
+
+.totals div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.grand {
+  font-weight: 700;
+  color: var(--ink-900);
+  border-top: 1px solid var(--line);
+  padding-top: 0.3rem;
+  margin-top: 0.2rem;
+}
+
+.detailGrid {
+  display: grid;
+  gap: 0.25rem 1rem;
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+  margin: 0.6rem 0;
+}
+
+.detailGrid span strong {
+  color: var(--ink-800);
+}
+
+.orderFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper-tint);
+  font-size: var(--fs-sm);
+}
+
+.toggleText {
+  flex: 1 1 240px;
+}
+
+.toggleTitle {
+  font-weight: 700;
+  color: var(--ink-800);
+  margin: 0;
+}
+
+.toggleNote {
+  margin: 0;
+  color: var(--ink-500);
+  font-size: var(--fs-xs);
+}

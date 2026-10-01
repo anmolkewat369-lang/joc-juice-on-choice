@@ -4,7 +4,8 @@
  * Mirrors `db/schema.sql` plus `db/migrations/002_payment_provider_and_admin.sql`,
  * `db/migrations/003_cod_payment_provider.sql`,
  * `db/migrations/004_delivery_and_notifications.sql` and
- * `db/migrations/005_delivery_area_confirmation.sql` — those files stay the
+ * `db/migrations/005_delivery_area_confirmation.sql` and
+ * `db/migrations/006_customer_accounts.sql` — those files stay the
  * reference for running migrations by hand in the Supabase SQL editor. This
  * copy exists so the API can self-provision on first request during local
  * development and nobody has to open a SQL editor to try ordering. Every
@@ -114,6 +115,15 @@ alter table joc_orders add column if not exists tracking_token text;
 -- is a different fact from false.
 alter table joc_orders add column if not exists delivery_area text;
 alter table joc_orders add column if not exists delivery_area_confirmed boolean;
+
+-- Migration 006. The Supabase user id an order belongs to. Nullable on purpose:
+-- NULL means "anonymous/legacy order", which is different from "owned by nobody".
+-- No foreign key to auth.users, so deleting a user never touches order history.
+-- The value is only ever written from a session validated server-side.
+alter table joc_orders add column if not exists customer_user_id uuid;
+create index if not exists joc_orders_customer_user_idx
+  on joc_orders (customer_user_id, created_at desc)
+  where customer_user_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- Widen payment_provider to accept 'cod' FIRST (migration 003).
@@ -278,6 +288,55 @@ create index if not exists joc_notifications_order_idx
 create index if not exists joc_notifications_pending_idx
   on joc_notifications (lease_until) where status = 'pending';
 
+-- ---------------------------------------------------------------------------
+-- Web Push (migration 006).
+--
+-- joc_push_subscriptions holds one row per browser endpoint. endpoint is unique
+-- so the same browser logging in as a different user reassigns its row by upsert
+-- instead of duplicating it. user_id and role are always derived server-side.
+--
+-- joc_push_deliveries is the exactly-once ledger: the unique
+-- (order_uuid, event, subscription_id) means a repeated CONFIRMED cannot send the
+-- same push twice, mirroring joc_notifications for email.
+-- ---------------------------------------------------------------------------
+create table if not exists joc_push_subscriptions (
+  id           bigint generated always as identity primary key,
+  user_id      text not null,
+  role         text not null check (role in ('customer', 'admin')),
+  endpoint     text not null,
+  p256dh       text not null,
+  auth         text not null,
+  user_agent   text,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  last_used_at timestamptz,
+  constraint joc_push_subscriptions_endpoint unique (endpoint)
+);
+
+create index if not exists joc_push_subscriptions_owner_idx
+  on joc_push_subscriptions (role, user_id);
+
+create table if not exists joc_push_deliveries (
+  id              bigint generated always as identity primary key,
+  order_uuid      uuid not null references joc_orders (id) on delete cascade,
+  order_ref       text not null,
+  event           text not null,
+  subscription_id bigint not null references joc_push_subscriptions (id) on delete cascade,
+  status          text not null default 'pending'
+                    check (status in ('pending', 'sent', 'failed', 'skipped')),
+  attempts        integer not null default 0,
+  last_error      text,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  constraint joc_push_deliveries_once unique (order_uuid, event, subscription_id)
+);
+
+create index if not exists joc_push_deliveries_order_idx
+  on joc_push_deliveries (order_uuid, created_at desc);
+
+alter table joc_push_subscriptions enable row level security;
+alter table joc_push_deliveries enable row level security;
+
 create or replace function joc_touch_updated_at() returns trigger
   language plpgsql as $$
 begin
@@ -306,6 +365,8 @@ insert into joc_schema_migrations (version) values ('003_cod_payment_provider')
 insert into joc_schema_migrations (version) values ('004_delivery_and_notifications')
   on conflict (version) do nothing;
 insert into joc_schema_migrations (version) values ('005_delivery_area_confirmation')
+  on conflict (version) do nothing;
+insert into joc_schema_migrations (version) values ('006_customer_accounts')
   on conflict (version) do nothing;
 `;
 

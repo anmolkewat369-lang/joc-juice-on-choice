@@ -19,7 +19,10 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function request(path, { method = "GET", body, idempotencyKey, signal, headers = {} } = {}) {
+export async function request(
+  path,
+  { method = "GET", body, idempotencyKey, signal, headers = {} } = {},
+) {
   let response;
   try {
     response = await fetch(path, {
@@ -44,11 +47,11 @@ async function request(path, { method = "GET", body, idempotencyKey, signal, hea
 
   if (!response.ok) {
     const detail = payload?.error;
-    // `errors` is a map of field name -> message, and only `invalid_checkout`
-    // produces one. Every other refusal uses `details` for context that is NOT a
-    // field error, so hydrating the form from it would paste a machine code onto an
-    // input.
-    const fieldErrors = detail?.code === "invalid_checkout" ? detail?.errors ?? null : null;
+    // `errors` is a field name -> message map when the server has precise
+    // per-input feedback (checkout, and the account forms). Endpoints that only
+    // have a sentence to give use `details` instead, which is never treated as a
+    // field error.
+    const fieldErrors = detail?.errors ?? null;
     throw new ApiRequestError(
       detail?.message ?? "Something went wrong. Please try again.",
       { code: detail?.code ?? "server_error", status: response.status, fieldErrors },
@@ -220,6 +223,61 @@ export const submitUtr = ({ orderId, paymentReference }) =>
     body: { orderId, paymentReference },
     headers: withOrderToken(orderId),
   });
+
+/* ------------------------------ customer account ------------------------- */
+
+/**
+ * Adopt an order secret handed to us by the My Orders list.
+ *
+ * The list knows the owner's tracking token because the customer API is
+ * authenticated; "View Order" then navigates to the normal `#/order/<id>?t=…`
+ * route, and this stores the token first so the tracking screen — and every poll
+ * or payment retry after it — can use the header path exactly as if the order
+ * had been placed on this device.
+ */
+export const adoptOrderToken = (orderId, token) => {
+  if (orderId && token) adoptToken(orderId, token);
+};
+
+export const getCustomerSession = ({ signal } = {}) =>
+  request("/api/customer/session", { signal });
+
+export const customerSignup = ({ name, email, password, confirmPassword }) =>
+  request("/api/customer/signup", {
+    method: "POST",
+    body: { name, email, password, confirmPassword },
+  });
+
+export const customerLogin = ({ email, password }) =>
+  request("/api/customer/login", { method: "POST", body: { email, password } });
+
+export const customerLogout = () => request("/api/customer/logout", { method: "DELETE" });
+
+export const customerForgot = ({ email }) =>
+  request("/api/customer/forgot", { method: "POST", body: { email } });
+
+export const customerReset = ({ accessToken, password, confirmPassword }) =>
+  request("/api/customer/reset", {
+    method: "POST",
+    body: { accessToken, password, confirmPassword },
+  });
+
+export const getMyOrders = ({ signal } = {}) =>
+  request("/api/customer/orders", { signal }).then((data) => data.orders ?? []);
+
+/* --------------------------------- web push ------------------------------ */
+
+export const getPushConfig = ({ signal } = {}) =>
+  request("/api/push/subscribe", { signal });
+
+export const savePushSubscription = (subscription) =>
+  request("/api/push/subscribe", {
+    method: "POST",
+    body: { subscription: subscription.toJSON ? subscription.toJSON() : subscription },
+  });
+
+export const removePushSubscription = (endpoint) =>
+  request("/api/push/subscribe", { method: "DELETE", body: { endpoint } });
 
 /** Stable per-attempt token so a repeat of the same submission is idempotent. */
 export const newIdempotencyKey = () =>

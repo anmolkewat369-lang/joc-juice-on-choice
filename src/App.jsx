@@ -1,6 +1,12 @@
 import { useCallback, useState } from "react";
 import CartProvider from "./cart/CartProvider";
 import { useRoute, useScrollReset, ROUTES, orderHref } from "./lib/route";
+import AuthProvider from "./account/AuthProvider";
+import { accountViewFor, ACCOUNT_VIEW } from "./account/accountRoute";
+import LoginView from "./account/LoginView";
+import SignupView from "./account/SignupView";
+import MyOrdersView from "./account/MyOrdersView";
+import ResetPasswordView from "./account/ResetPasswordView";
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
 import CategoryCards from "./components/CategoryCards";
@@ -64,10 +70,26 @@ function Ordering({ route, placed, onPlaced, onSettled }) {
   return null;
 }
 
-export default function App() {
+/** The four real-path account screens, chosen from the current URL path. */
+function AccountView({ view }) {
+  if (view === ACCOUNT_VIEW.LOGIN) return <LoginView />;
+  if (view === ACCOUNT_VIEW.SIGNUP) return <SignupView />;
+  if (view === ACCOUNT_VIEW.MY_ORDERS) return <MyOrdersView />;
+  if (view === ACCOUNT_VIEW.RESET_PASSWORD) return <ResetPasswordView />;
+  return null;
+}
+
+function AppShell() {
   const [filter, setFilter] = useState("All");
   const { route, navigate } = useRoute();
   useScrollReset(route.name);
+
+  /**
+   * Account pages are real paths (/login, /signup, /my-orders, /reset-password)
+   * rendered inside the storefront shell, so the navbar and footer stay put and
+   * the cart is untouched. Everything else keeps the hash routing below.
+   */
+  const accountView = accountViewFor(window.location.pathname);
 
   /** The most recent order handed over by checkout, including any failure. */
   const [placed, setPlaced] = useState({ outcome: null, notice: null });
@@ -98,21 +120,33 @@ export default function App() {
 
   const ordering = route.name !== "home";
 
+  const skipTarget = accountView ? "#main-content" : ordering ? "#order-status" : "#menu";
+
   return (
     <CartProvider>
-      <a className="skip-link" href={ordering ? "#order-status" : "#menu"}>
-        Skip to the {ordering ? "order status" : "menu"}
+      <a className="skip-link" href={skipTarget}>
+        Skip to the {accountView ? "main content" : ordering ? "order status" : "menu"}
       </a>
       <Navbar />
       <main id="main-content">
-        {ordering ? (
+        {accountView ? (
+          <AccountView view={accountView} />
+        ) : ordering ? (
           <Ordering route={route} placed={placed} onPlaced={handlePlaced} onSettled={handleSettled} />
         ) : (
           <Home filter={filter} onFilterChange={setFilter} selectCategory={selectCategory} />
         )}
       </main>
       {!ordering ? <Footer /> : null}
-      {!ordering ? <StickyCta /> : null}
+      {!ordering && !accountView ? <StickyCta /> : null}
     </CartProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   );
 }

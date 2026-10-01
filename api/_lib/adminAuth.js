@@ -20,6 +20,12 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { ApiError } from "./http.js";
+import {
+  supabaseUrl,
+  supabaseAnonKey,
+  isSupabaseConfigured,
+  passwordGrant,
+} from "./supabaseAuth.js";
 
 export const SESSION_COOKIE = "joc_admin_session";
 
@@ -36,12 +42,10 @@ const env = (name) => {
   return typeof value === "string" ? value.trim() : "";
 };
 
-export const supabaseUrl = () => env("SUPABASE_URL").replace(/\/+$/, "");
-export const supabaseAnonKey = () => env("SUPABASE_ANON_KEY");
-
-/** True only when Supabase Auth is reachable-ready: URL and anon key present. */
-export const isSupabaseConfigured = () =>
-  Boolean(supabaseUrl() && supabaseAnonKey());
+// `supabaseUrl`, `supabaseAnonKey` and `isSupabaseConfigured` are re-exported so
+// the rest of the admin code keeps its existing import surface while the actual
+// transport lives in one shared module (supabaseAuth.js).
+export { supabaseUrl, supabaseAnonKey, isSupabaseConfigured };
 
 /**
  * Optional allow-list of admin email addresses. When set, an authenticated
@@ -186,39 +190,11 @@ export async function signInWithPassword({ email, password }) {
     );
   }
 
-  let response;
-  try {
-    response = await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
-      method: "POST",
-      headers: {
-        apikey: supabaseAnonKey(),
-        Authorization: `Bearer ${supabaseAnonKey()}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email, password }),
-    });
-  } catch {
-    // Never let a Supabase outage be reported as "wrong password".
-    throw new ApiError(
-      503,
-      "Could not reach the sign-in service. Please try again in a moment.",
-      "auth_unavailable",
-    );
-  }
+  // The password is forwarded to Supabase and dropped. `passwordGrant` throws
+  // auth_unavailable on an outage and invalid_credentials on a refusal, both
+  // with messages that are already safe to show an admin.
+  const { id, email: address } = await passwordGrant({ email, password });
 
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    // One generic message for every Supabase failure, so a probe cannot tell a
-    // wrong password from a non-existent account from an unconfirmed email.
-    throw new ApiError(401, "Those sign-in details were not accepted.", "invalid_credentials");
-  }
-
-  const id = payload?.user?.id;
-  const address = payload?.user?.email;
-  if (!id || !address) {
-    throw new ApiError(401, "Those sign-in details were not accepted.", "invalid_credentials");
-  }
   if (!isEmailAllowed(address)) {
     throw new ApiError(403, "This account is not allowed to use the admin dashboard.", "not_allowed");
   }

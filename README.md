@@ -1,17 +1,22 @@
 # JOC — Juice On Choice
 
-The JOC Juice and Cafe website for Dixit Colony, Marhatal, Jabalpur, with guest
-ordering (cart → checkout → confirmation), customer order tracking, and
-server-side order storage. Menu and prices are based on the current public listing
-and may change.
+The JOC Juice and Cafe website for Dixit Colony, Marhatal, Jabalpur, with customer
+accounts and ordering (cart → checkout → confirmation), order tracking, My Orders,
+and server-side order storage. Menu and prices are based on the current public
+listing and may change.
 
 ## Stack
 
-- React 19 + Vite (single-page app, no router library)
+- React 19 + Vite (single-page app, no router library; account pages are real
+  paths served by the SPA fallback)
 - Plain CSS with design tokens and CSS Modules (no UI framework)
 - `lucide-react` for icons
 - Serverless API functions under `api/` for Vercel
 - `pg` + **Supabase Postgres** for durable order storage (`DATABASE_URL`)
+- **Supabase Auth** for admin sign-in and customer accounts — no password is stored
+  by JOC
+- `web-push` with VAPID for real browser push (optional, with polling/badge/sound
+  as the fallback)
 - A **payment provider abstraction** (`api/_lib/payments.js`) with two rails:
   - **Manual UPI** (current): the customer pays your UPI ID, submits the UTR, and
     an admin verifies it. No gateway, no secrets, no SDK.
@@ -26,7 +31,7 @@ npm run dev      # dev server + local /api bridge (dev/jocApiDevServer.js)
 npm run build    # production build to dist/
 npm run preview  # serve the production build
 npm run lint     # oxlint
-npm test         # guard-rule + QR encoder checks (no database needed)
+npm test         # guard, delivery, notification, customer-auth and push checks (no database needed)
 ```
 
 Without `DATABASE_URL` the API runs in a clearly-labelled **in-memory demo** mode
@@ -45,6 +50,8 @@ them work against the in-memory store, so none needs a database or a network.
 | `dev/checkDelivery.mjs` | 34 checks on the delivery-area rule: the list is exactly JOC's 22 areas with these labels in this order, every one is accepted by the server and findable by search (commas included), membership is checked after normalising case and whitespace, prototype keys and the previous provisional names are refused, the confirmation must be exactly `true`, a placed order carries no distance and triggers no outbound request, and **no file under `api/`, `shared/` or `src/` mentions a maps provider, a radius or a coordinate** |
 | `dev/checkPostgres.mjs` | 11 checks on the **durable** driver, driven against a stub `pg` pool: `delivery_area` and `delivery_area_confirmed` are in the real `INSERT` with the right values, the customer's name/phone/email/address/landmark/instructions are all still stored, no legacy distance column is written, and a row read back out carries the area, its label, the confirmation, the address and the landmark to the admin |
 | `dev/checkNotifications.mjs` | 17 checks on the send ledger: exactly-once under repeated and concurrent triggers, distinct-status dedupe, skipped-vs-failed recording, a broken provider never failing an order, an unreachable ledger still sending, and the tracking token never appearing in a payload |
+| `dev/checkCustomerAuth.mjs` | 18 checks on customer accounts: a session cannot be minted without a secret, a customer token is never an admin token (and vice versa), tampering/rotation/expiry are rejected, the cookie is httpOnly/Lax/path-wide and Secure only over TLS, `requireCustomer` fails closed, login sets a cookie only on success, signup waits for confirmation when Supabase issued no session, and `GET /orders` returns only the caller's own orders with owner-only tracking secrets |
+| `dev/checkPush.mjs` | 21 checks on Web Push: VAPID must be fully configured, a new order fans out to every admin subscription and never to a customer, a confirmation goes only to the owning customer, the tracking secret stays in the URL fragment, a repeated fact sends exactly once, transient failures are recorded and kept while `410`s are cleaned up, no push failure throws, and the subscription endpoint decides the caller's role server-side |
 | `dev/checkFooter.mjs` | 9 checks against the **rendered** footer (its Vite SSR bundle, then `react-dom/server`): the Contact Us details, the WhatsApp action and the phone/email tap targets are present, the contact block is not conditional on the viewport and no stylesheet hides it, the sticky "Get Directions" clearance exists at the bar's own breakpoint, long values cannot force a sideways scroll, and the footer still shows every link and line it had before |
 | `dev/checkQr.mjs` | Decodes the server-generated UPI QR with **jsQR** — an independent implementation — across every payload length 1..213, several error-correction levels, and realistic `upi://pay` intent strings |
 
@@ -165,6 +172,10 @@ few moving parts as possible.
 | POST | `/api/admin/login` / `/api/admin/session` | Supabase sign-in and session probe for `/admin` |
 | GET | `/api/admin/orders` | Admin order list, filters, counts, pagination |
 | GET/PATCH | `/api/admin/orders/:orderId` | Order detail, verify a UTR, advance order status, notification audit rows |
+| POST | `/api/customer/signup` · `/login` · `/forgot` · `/reset` | Create an account, sign in, request a reset, set a new password — all through Supabase Auth; JOC never stores a password or a hash |
+| GET | `/api/customer/session` · `/api/customer/orders` | Session probe, and the signed-in customer's own orders. Ownership comes from the session cookie, never from a query parameter |
+| POST/DELETE | `/api/customer/logout` | Clear the customer session cookie |
+| GET/POST/DELETE | `/api/push/subscribe` | Web Push: the VAPID public key and the caller's role, subscribe with a browser subscription, unsubscribe by endpoint. The role and user id are derived server-side |
 
 Vercel's Hobby plan allows 12 serverless functions per deployment, so
 `/api/payments/methods` is served by `api/payments/create.js` and keeps the URL above:
@@ -175,10 +186,17 @@ own `X-Order-Token`.
 
 Removing `/api/delivery/*` frees two of those twelve slots, which matters: every
 serverless function counts against the plan limit regardless of how small it is.
+Customer accounts and push each add exactly one function — `api/customer/[action].js`
+(a single-segment dynamic route that dispatches `signup` / `login` / `logout` /
+`session` / `forgot` / `reset` / `orders`) and `api/push/subscribe.js` — which keeps
+the deployment inside the Hobby cap instead of adding one function per action.
 
 Admin routes require a valid session cookie and fail closed with a 500-style
-`ApiError` when `JOC_ADMIN_SESSION_SECRET` is unset. `/admin` is a real path, not
-a hash route, and `vercel.json` sends `X-Robots-Tag: noindex` on it.
+`ApiError` when `JOC_ADMIN_SESSION_SECRET` is unset. Customer routes are separate:
+they use a different cookie signed with a different derived key, and
+`POST /api/orders` returns `401 customer_unauthenticated` without one, so an
+anonymous browser cannot place an order. `/admin` and `/my-orders` are real paths,
+not hash routes, and `vercel.json` sends `X-Robots-Tag: noindex` on both.
 
 ## Notifications
 
@@ -200,8 +218,54 @@ Email is optional and is never allowed to affect whether an order succeeds.
 - **No automated WhatsApp messages.** JOC sends nothing over WhatsApp by itself.
   Separately, the site's footer offers a `wa.me` link and the admin drawer offers a
   "Share on WhatsApp" link, both opened by a person; the admin one is built from
-  `JOC_WHATSAPP_NUMBER` and is hidden when that is unset. A real integration would
-  need an official JOC business number and a provider implementation.
+   `JOC_WHATSAPP_NUMBER` and is hidden when that is unset. A real integration would
+   need an official JOC business number and a provider implementation.
+
+## Customer accounts
+
+Signup, login and password reset are handled by **Supabase Auth**, the same project
+that already guards `/admin`. JOC stores no password and no hash: the browser posts
+email + password to `/api/customer/*`, the server exchanges it with Supabase over
+TLS, and only a signed `joc_customer_session` cookie comes back. Customer and admin
+sessions are signed with **different derived keys**, so a customer cookie can never
+be replayed as an admin one (and vice versa).
+
+- **Orders require login.** `POST /api/orders` calls `requireCustomer` first and
+  returns `401 customer_unauthenticated` without a valid session. The checkout keeps
+  the cart in `localStorage` and reopens at `/#/checkout` after login, so the
+  redirect never loses the order the customer was building.
+- **Ownership is server-side.** `GET /api/customer/orders` reads the user id from the
+  validated session; no `customer_user_id` is ever accepted from the browser.
+  "My Orders" lists newest first and its "View Order" reuses the existing
+  token-scoped tracking route.
+- **The reset link arrives as a fragment.** Supabase's recovery flow lands on
+  `/reset-password` with `#access_token=...&type=recovery`; the page reads it from
+  the fragment (which is never sent to a server), then calls `/api/customer/reset`.
+- **Production gotcha.** Add the site's `/login` and `/reset-password` URLs to
+  **Authentication → URL Configuration → Redirect URLs** in Supabase, or the
+  confirmation and recovery emails will point at the wrong place.
+
+### Web Push
+
+Real browser push (Push API + a service worker at `public/sw.js` + VAPID), with the
+existing polling, badge and sound left in place as the fallback.
+
+- **Two moments notify.** Placing an order pushes a minimal "New JOC Order" fact to
+  every authorized **admin** subscription; moving an order to `CONFIRMED` pushes
+  "JOC Order Confirmed" **only to the owning customer**. Nothing is broadcast.
+- **A push cannot fail an order.** Sends run after the order commits; a push error is
+  logged server-side and never surfaces as "Order failed".
+- **Exactly once.** `joc_push_deliveries` is unique on
+  `(order_uuid, event, subscription_id)`, so a repeated trigger or two dashboard
+  clicks cannot send twice. `410 Gone` subscriptions are deleted; transient failures
+  are recorded and left retryable.
+- **The role is not client-supplied.** `POST /api/push/subscribe` derives the user id
+  and the `customer` / `admin` role from the session, then upserts on the unique
+  endpoint. Disabling notifications in the UI deletes that endpoint.
+- **Honest limits.** Push is best-effort: it needs permission, can be blocked at the
+  OS or browser level, and depends on the device being online and the browser alive.
+  Where it does not arrive, the dashboard's polling, badge and sound are the
+  backstop.
 
 ## Environment
 
@@ -217,8 +281,10 @@ Copy `.env.example` → `.env.local` for local development. All values are
 | `JOC_PAYMENT_PROVIDER` | Optional | `manual_upi` (default) or `razorpay`. Selects which rail settles a digital payment |
 | `JOC_UPI_ID` | **For the UPI option at checkout** | The JOC UPI handle. **Not a secret** — it is shown to customers and embedded in the payment QR. Without it, checkout offers Cash on Delivery only |
 | `JOC_ADMIN_SESSION_SECRET` | For `/admin` | ≥32 chars, random. Signs the admin session cookie. Never commit |
-| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | For `/admin` | Supabase Auth only. The anon key cannot read any table (RLS is enabled with no policies) |
+| `JOC_CUSTOMER_SESSION_SECRET` | Optional | ≥32 chars, random. Signs the customer session cookie; falls back to `JOC_ADMIN_SESSION_SECRET` when unset. A separate value is recommended |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | For `/admin` and customer accounts | Supabase Auth only. The anon key cannot read any table (RLS is enabled with no policies) |
 | `JOC_ADMIN_EMAILS` | Optional | Allow-list. Empty means any user who can sign in |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | For Web Push | Generate once with `npx web-push generate-vapid-keys`. The public key is served to the browser; the private key is server-only and a secret; the subject is a `mailto:` or `https:` URL |
 | `JOC_NOTIFY_EMAIL` / `JOC_NOTIFY_FROM` / `RESEND_API_KEY` | Optional | Email notifications. All three needed; the key is a secret |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Only if provider is `razorpay` | `rzp_test_...` / `rzp_live_...`. The secret must never be committed |
 | `RAZORPAY_TEST_MODE` | Optional | Defaults `true`; live money only when explicitly `false` AND live keys are set |
@@ -239,14 +305,18 @@ Copy `.env.example` → `.env.local` for local development. All values are
 
 ### What is and is not a secret
 
-Only four things here are secret: `DATABASE_URL` (it embeds the DB password),
-`JOC_ADMIN_SESSION_SECRET`, `RESEND_API_KEY`, and `RAZORPAY_KEY_SECRET` — the last
-only if you ever enable Razorpay. Commit none of them.
+Only these are secret: `DATABASE_URL` (it embeds the DB password),
+`JOC_ADMIN_SESSION_SECRET`, `JOC_CUSTOMER_SESSION_SECRET` (if set — otherwise it
+inherits the admin secret), `VAPID_PRIVATE_KEY`, `RESEND_API_KEY`, and
+`RAZORPAY_KEY_SECRET` — the last only if you ever enable Razorpay. Commit none of
+them.
 
-`JOC_UPI_ID` and `SUPABASE_ANON_KEY` look sensitive but are not:
-`JOC_UPI_ID` is printed on the checkout page and embedded in the payment QR by
-design, and the Supabase anon key only allows exchanging a password for a
-session, with RLS enabled and no policies so it cannot read a single row.
+`JOC_UPI_ID`, `SUPABASE_ANON_KEY` and `VAPID_PUBLIC_KEY` look sensitive but are
+not: `JOC_UPI_ID` is printed on the checkout page and embedded in the payment QR by
+design, `VAPID_PUBLIC_KEY` is handed to the browser by `/api/push/subscribe` so it
+can create a subscription, and the Supabase anon key only allows exchanging a
+password for a session, with RLS enabled and no policies so it cannot read a single
+row.
 
 `.env`, `.env.local` and `.env*.local` are git-ignored and `.env.example` is the
 only environment file tracked in the repository. Nothing under this project
@@ -278,11 +348,20 @@ fragment-scoped.
 4. **Admin**: set `JOC_ADMIN_SESSION_SECRET`, `SUPABASE_URL` and
    `SUPABASE_ANON_KEY`, then sign in at `/admin`. The dashboard is where a UPI
    payment moves from `PAYMENT_VERIFICATION_REQUIRED` to `PAID`.
-5. **Notifications (optional)**: set `RESEND_API_KEY`, a Resend-verified
+5. **Customer accounts**: reuse the same `SUPABASE_URL` and `SUPABASE_ANON_KEY`,
+   optionally set `JOC_CUSTOMER_SESSION_SECRET`, and add the site's `/login` and
+   `/reset-password` URLs to Supabase's Redirect URLs. Customers sign up at
+   `/signup`, sign in at `/login`, and see their orders at `/my-orders`.
+   `POST /api/orders` now refuses an anonymous browser.
+6. **Web Push (optional)**: run `npx web-push generate-vapid-keys`, set all three
+   `VAPID_*` variables, then enable notifications from `/my-orders` (customer) and
+   the admin dashboard (admin). Without them push stays off and the polling,
+   badge and sound fallback keeps working.
+7. **Notifications (optional)**: set `RESEND_API_KEY`, a Resend-verified
    `JOC_NOTIFY_FROM`, and `JOC_NOTIFY_EMAIL` for the admin alert. Customer
    confirmations go to whatever address the customer typed at checkout. Unset,
    everything else keeps working and the ledger records the skips.
-6. **Vercel**: connect the repo, add the environment variables for Preview and
+8. **Vercel**: connect the repo, add the environment variables for Preview and
    Production, and set the build command/root from `vercel.json`. The API
    functions deploy as serverless routes automatically.
 
@@ -291,17 +370,23 @@ fragment-scoped.
 ```
 api/            Vercel serverless functions (orders, payments)
 api/_lib/       Shared server code: store, schema, payments, QR, admin auth,
-                email, notifications
+                customer auth, email, notifications, push
 api/admin/      Admin-only routes (login, session, order list/detail)
+api/customer/   Customer account route ([action]: signup/login/logout/session/
+                forgot/reset/orders)
+api/push/       Web Push subscription route
+public/sw.js    Service worker: receives push, opens the right same-origin page
 db/schema.sql   Postgres schema (orders, notifications, indexes, updated trigger)
 db/migrations/  Ordered migrations for an existing database (002 payment/admin,
                 003 COD, 004 delivery + email + notifications,
-                005 delivery area + confirmation)
+                005 delivery area + confirmation,
+                006 customer accounts + push subscriptions/deliveries)
 shared/         Contract imported by frontend and API (ordering, delivery)
+src/account/    Signup/login/reset, auth context, My Orders, push toggle
 src/admin/      Admin dashboard (lazy-loaded; never requested by a customer)
 src/cart/       Cart context, localStorage persistence
 src/data/       Content: menu, gallery, categories, business details, delivery areas
-src/lib/        Hash routing, API client, Razorpay loader, order flow state machine
+src/lib/        Hash routing, API client, Razorpay loader, order flow state machine, push client
 src/components/cart/    Cart page
 src/components/order/   Checkout, area picker, confirmation/tracking/failure
 dev/            Local-only /api bridge for the Vite dev server, plus npm test checks
@@ -372,20 +457,28 @@ name, address and category — no phone, no opening hours, no aggregate rating.
 6. Swap the developer's contact details for the business's own, in
    `src/data/business.js`.
 7. Create the production Supabase project and add `DATABASE_URL`.
-8. Confirm `JOC_UPI_ID` on the production deployment by reading
-   `GET /api/payments/methods` — it should report `provider: manual_upi` with
-   both Cash on Delivery and UPI available.
-9. Place one test order from a real customer address and read it at
-   `/admin/orders`: the area, the exact address and the customer's confirmation
-   should all be there, and the order should sit at `RECEIVED` until you accept it.
-   This is the one flow where "it looks fine in the browser" is not evidence — the
-   confirmation the customer ticked is not the same as the address JOC can find.
-10. Set `JOC_SITE_URL` to the real domain, so tracking links in customer emails
+8. Apply `db/migrations/006_customer_accounts.sql` before deploying this code (the
+   same SQL-editor/direct-connection rule as 005), set
+   `JOC_CUSTOMER_SESSION_SECRET`, and add `/login` and `/reset-password` to
+   Supabase's Redirect URLs. Place a test order while signed out to confirm
+   `POST /api/orders` returns `401 customer_unauthenticated`, then sign in and
+   confirm it succeeds.
+9. (Optional) Run `npx web-push generate-vapid-keys`, set the three `VAPID_*`
+   variables, and enable notifications at `/my-orders` and in the dashboard.
+10. Confirm `JOC_UPI_ID` on the production deployment by reading
+    `GET /api/payments/methods` — it should report `provider: manual_upi` with
+    both Cash on Delivery and UPI available.
+11. Place one test order from a real customer address and read it at
+    `/admin/orders`: the area, the exact address and the customer's confirmation
+    should all be there, and the order should sit at `RECEIVED` until you accept it.
+    This is the one flow where "it looks fine in the browser" is not evidence — the
+    confirmation the customer ticked is not the same as the address JOC can find.
+12. Set `JOC_SITE_URL` to the real domain, so tracking links in customer emails
     point at production.
-11. Run `npm test` and `npm run lint` against the final state.
-12. Add the live domain as `<link rel="canonical">` and a real 1200×630 OG image.
-13. Remove the concept/demo wording from the hero, contact section and footer.
-14. Decide the order-status workflow (`RECEIVED → … → DELIVERED` is already
+13. Run `npm test` and `npm run lint` against the final state.
+14. Add the live domain as `<link rel="canonical">` and a real 1200×630 OG image.
+15. Remove the concept/demo wording from the hero, contact section and footer.
+16. Decide the order-status workflow (`RECEIVED → … → DELIVERED` is already
     modelled and enforced server-side, and editable from `/admin/orders`).
 
 > Razorpay is **not** required to go live. It stays behind the provider

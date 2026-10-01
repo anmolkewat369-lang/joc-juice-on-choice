@@ -1,17 +1,36 @@
 import { useEffect, useState } from "react";
-import { MapPin, Menu as MenuIcon, X, ShoppingBag } from "lucide-react";
+import { MapPin, Menu as MenuIcon, X, ShoppingBag, User } from "lucide-react";
 import { BRAND, LINKS, NAV_LINKS } from "../data/business";
 import { useCart } from "../cart/cartStore";
 import { cartHref } from "../lib/route";
+import { useCustomer } from "../account/AuthProvider";
+import { myOrdersHref, loginHref } from "../account/accountRoute";
 import styles from "./Navbar.module.css";
+
+/**
+ * On a real-path account page the hash anchors have to carry the root path back
+ * with them — otherwise `#menu` would just change the fragment and leave the
+ * customer staring at the login screen. Everywhere else they stay exactly as
+ * they were.
+ */
+const onRootPath = () =>
+  typeof window === "undefined" || window.location.pathname === "/";
+const sectionHref = (hash) => (onRootPath() ? hash : `/${hash}`);
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState("#home");
   const { count, isEmpty } = useCart();
+  const { customer, logout } = useCustomer();
 
   const closeMenu = () => setOpen(false);
+
+  const handleLogout = async () => {
+    closeMenu();
+    await logout();
+    window.location.assign("/");
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -70,7 +89,7 @@ export default function Navbar() {
           <span className={styles.logoMark}> block below for an <img> with the
           brand's alt text. Nothing else needs to change.
         */}
-        <a className={styles.logo} href="#home" aria-label={`${BRAND.name} — home`}>
+        <a className={styles.logo} href={sectionHref("#home")} aria-label={`${BRAND.name} — home`}>
           <span className={styles.logoMark} aria-hidden="true">
             <svg viewBox="0 0 32 32" focusable="false">
               <path d="M9 4h14l-2 20a3 3 0 0 1-3 2.6h-4A3 3 0 0 1 11 24L9 4Z" fill="currentColor" />
@@ -90,13 +109,18 @@ export default function Navbar() {
               <li key={link.href}>
                 <a
                   className={`${styles.navLink} ${active === link.href ? styles.navLinkActive : ""}`}
-                  href={link.href}
+                  href={sectionHref(link.href)}
                   aria-current={active === link.href ? "true" : undefined}
                 >
                   {link.label}
                 </a>
               </li>
             ))}
+            <li>
+              <a className={styles.navLink} href={myOrdersHref}>
+                My Orders
+              </a>
+            </li>
           </ul>
         </nav>
 
@@ -112,6 +136,17 @@ export default function Navbar() {
               {count}
             </span>
           </a>
+          {customer ? (
+            <button type="button" className={styles.accountLink} onClick={handleLogout}>
+              <User size={17} aria-hidden="true" />
+              <span className={styles.accountLabel}>Log Out</span>
+            </button>
+          ) : (
+            <a className={styles.accountLink} href={loginHref}>
+              <User size={17} aria-hidden="true" />
+              <span className={styles.accountLabel}>Log In</span>
+            </a>
+          )}
           <a
             className={`btn btn--primary ${styles.enquire}`}
             href={LINKS.maps}
@@ -143,7 +178,7 @@ export default function Navbar() {
           <ul className={styles.mobileList}>
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
-                <a className={styles.mobileLink} href={link.href} onClick={closeMenu}>
+                <a className={styles.mobileLink} href={sectionHref(link.href)} onClick={closeMenu}>
                   {link.label}
                 </a>
               </li>
@@ -152,6 +187,26 @@ export default function Navbar() {
               <a className={styles.mobileLink} href={cartHref} onClick={closeMenu}>
                 Cart{isEmpty ? "" : ` (${count})`}
               </a>
+            </li>
+            <li>
+              <a className={styles.mobileLink} href={myOrdersHref} onClick={closeMenu}>
+                My Orders
+              </a>
+            </li>
+            <li>
+              {customer ? (
+                <button
+                  type="button"
+                  className={`${styles.mobileLink} ${styles.mobileButton}`}
+                  onClick={handleLogout}
+                >
+                  Log Out
+                </button>
+              ) : (
+                <a className={styles.mobileLink} href={loginHref} onClick={closeMenu}>
+                  Log In
+                </a>
+              )}
             </li>
           </ul>
         </nav>
@@ -168,7 +223,7 @@ export default function Navbar() {
           </a>
           <a
             className="btn btn--ghost btn--block"
-            href="#location"
+            href={sectionHref("#location")}
             onClick={closeMenu}
           >
             <MapPin size={18} aria-hidden="true" />

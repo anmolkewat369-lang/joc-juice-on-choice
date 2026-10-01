@@ -25,6 +25,7 @@ import {
 import { deliveryAreaStatusLabel } from "../../shared/delivery.js";
 import { actOnOrder, getOrder, listOrders } from "./api.js";
 import NewOrderAlert from "./NewOrderAlert.jsx";
+import NotificationToggle from "../account/NotificationToggle.jsx";
 import { formatPrice, formatDateTime } from "./format.js";
 import styles from "./AdminOrders.module.css";
 
@@ -308,6 +309,15 @@ export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSes
       </header>
 
       <NewOrderAlert ref={notifyRef} enabled={soundOn} whatsappNumber={notify?.whatsappNumber} />
+
+      {/*
+        Web Push sits alongside — not in place of — the in-page sound and browser
+        notification above. It is what reaches this device when the dashboard is
+        not open at all; the badge and sound remain the fallback while it is.
+      */}
+      <div className={styles.pushBar}>
+        <NotificationToggle audience="admin" />
+      </div>
 
       {error ? (
         <p className={styles.error} role="alert">

@@ -41,7 +41,7 @@ export function readIdempotencyKey(req) {
  * against that list, and this record carries the normalised id, the label resolved
  * from the list and a real boolean. No distance is measured and none is stored.
  */
-export function buildOrderRecord(body) {
+export function buildOrderRecord(body, { customerUserId = null } = {}) {
   const { errors, valid, value } = validateCheckout(body);
   if (!valid) {
     // The whole field map travels in `errors`, and the first message becomes the
@@ -77,6 +77,10 @@ export function buildOrderRecord(body) {
   const accessToken = newAccessToken();
 
   return {
+    // The owning Supabase user id. It is a parameter, never a body field, so the
+    // only value that can reach this property is one the route derived from a
+    // validated session. Null means an anonymous/legacy order.
+    customerUserId,
     customerName: value.name,
     phone: value.phone,
     // Null when the customer gave none, which is normal and not an error.

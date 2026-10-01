@@ -99,6 +99,10 @@
   cursor: not-allowed;
 }
 
+.pushBar {
+  margin-bottom: 0.9rem;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;

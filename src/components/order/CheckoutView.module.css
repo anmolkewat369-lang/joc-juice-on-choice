@@ -385,6 +385,12 @@
   color: var(--ink-500);
 }
 
+.authActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 /* ------------------------------ Breakpoints ------------------------------ */
 
 @media (min-width: 720px) {

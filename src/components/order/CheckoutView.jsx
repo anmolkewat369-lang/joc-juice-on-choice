@@ -17,6 +17,8 @@ import {
   DELIVERY_AREA_NOTE,
 } from "../../../shared/delivery.js";
 import { cartHref, homeHref } from "../../lib/route";
+import { useCustomer } from "../../account/AuthProvider";
+import { loginHref } from "../../account/accountRoute";
 import { useOrderFlow, isBusy, FLOW } from "../../lib/useOrderFlow";
 import Field from "./Field";
 import AreaSelector from "./AreaSelector";
@@ -45,6 +47,45 @@ const BUTTON_COPY = {
 };
 
 /**
+ * A half-typed checkout survives the trip to the login page.
+ *
+ * Ordering now requires an account, so a customer can be sent to /login and back
+ * mid-form. The cart already lives in localStorage; this keeps the address they
+ * had started typing in sessionStorage so a redirect does not silently discard
+ * it. It is cleared the moment an order is actually placed, so the next checkout
+ * starts clean.
+ */
+const DRAFT_KEY = "joc.checkout.draft.v1";
+
+const readDraft = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(window.sessionStorage.getItem(DRAFT_KEY) ?? "null");
+    return parsed && typeof parsed === "object" ? { ...EMPTY_FORM, ...parsed } : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeDraft = (form) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+  } catch {
+    /* private browsing — the in-memory form still works for this visit */
+  }
+};
+
+const clearDraft = () => {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* nothing to clear */
+  }
+};
+
+/**
  * Guest checkout — no account, no registration.
  *
  * Collected: name, mobile, delivery area, exact address, and optionally a landmark,
@@ -55,7 +96,8 @@ const BUTTON_COPY = {
  */
 export default function CheckoutView({ onPlaced, onReturnHome }) {
   const { lines, subtotal, deliveryCharge, total, isEmpty } = useCart();
-  const [form, setForm] = useState(EMPTY_FORM);
+  const { status: authStatus, customer } = useCustomer();
+  const [form, setForm] = useState(() => readDraft() ?? EMPTY_FORM);
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
 
@@ -73,6 +115,22 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
     headingRef.current?.focus();
   }, []);
 
+  // Persist every edit so a redirect to log in and back does not lose the form.
+  useEffect(() => {
+    writeDraft(form);
+  }, [form]);
+
+  // Prefill the email from the signed-in account, but never overwrite something
+  // the customer has already typed.
+  useEffect(() => {
+    if (!customer?.email) return;
+    // The session resolves after this screen mounts, so the account email cannot
+    // be an initial value; syncing it in is exactly what an effect is for. The
+    // rule's synchronous-update concern does not apply. Suppressed here only.
+    // oxlint-disable-next-line react/set-state-in-effect
+    setForm((current) => (current.email ? current : { ...current, email: customer.email }));
+  }, [customer?.email]);
+
   if (isEmpty) {
     return (
       <section className={`section ${styles.page}`} aria-labelledby="checkout-title">
@@ -84,6 +142,47 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
           <a className="btn btn--primary btn--lg" href="#menu">
             Browse Menu
           </a>
+        </div>
+      </section>
+    );
+  }
+
+  // The account is still being checked. A brief status screen beats flashing the
+  // login gate for someone who is already signed in.
+  if (authStatus === "loading") {
+    return (
+      <section className={`section ${styles.page}`} aria-labelledby="checkout-title">
+        <div className={`container ${styles.emptyWrap}`}>
+          <h1 id="checkout-title" className={styles.emptyTitle} tabIndex={-1} ref={headingRef}>
+            Checking your account…
+          </h1>
+        </div>
+      </section>
+    );
+  }
+
+  // Ordering requires an account. The cart is in localStorage and the half-typed
+  // form is in sessionStorage, so a trip through login and back loses nothing.
+  if (!customer) {
+    const next = encodeURIComponent("/#/checkout");
+    return (
+      <section className={`section ${styles.page}`} aria-labelledby="checkout-title">
+        <div className={`container ${styles.emptyWrap}`}>
+          <h1 id="checkout-title" className={styles.emptyTitle} tabIndex={-1} ref={headingRef}>
+            Please log in to place your order
+          </h1>
+          <p>
+            Please log in to place an order and track it from My Orders. Your cart is saved, and we
+            will bring you straight back here.
+          </p>
+          <div className={styles.authActions}>
+            <a className="btn btn--primary btn--lg" href={`${loginHref}?next=${next}`}>
+              Log In
+            </a>
+            <a className="btn btn--ghost btn--lg" href={`/signup?next=${next}`}>
+              Create Account
+            </a>
+          </div>
         </div>
       </section>
     );
@@ -118,7 +217,10 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
       return;
     }
 
-    await flow.placeOrder({ items, details: result.value });
+    const order = await flow.placeOrder({ items, details: result.value });
+    // The order exists now, so the saved draft has done its job. Clearing it
+    // means the next checkout does not resurrect this address.
+    if (order) clearDraft();
   };
 
   /**
@@ -151,7 +253,7 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
           <h1 id="checkout-title" tabIndex={-1} ref={headingRef}>
             Checkout
           </h1>
-          <p>Tell us where to deliver and how you would like to pay. No account needed.</p>
+          <p>Tell us where to deliver and how you would like to pay.</p>
         </header>
 
         <div className={styles.layout}>
@@ -340,6 +442,17 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
                       </button>
                     </>
                   ) : null}
+                  {flow.error.code === "customer_unauthenticated" ? (
+                    <>
+                      {" "}
+                      <a
+                        className={styles.alertAction}
+                        href={`${loginHref}?next=${encodeURIComponent("/#/checkout")}`}
+                      >
+                        Log in and continue
+                      </a>
+                    </>
+                  ) : null}
                 </span>
               </p>
             ) : null}
@@ -420,7 +533,7 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
 
             <p className={styles.secure}>
               <ShieldCheck size={15} aria-hidden="true" />
-              Guest checkout — we only ask for what is needed to deliver.
+              We only ask for what is needed to deliver, and keep it under your account.
             </p>
           </aside>
         </div>
