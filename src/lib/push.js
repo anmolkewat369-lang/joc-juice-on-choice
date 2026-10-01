@@ -49,26 +49,59 @@ function urlBase64ToUint8Array(base64) {
 }
 
 /**
- * What the UI needs to decide between "Enable", "Enabled", "Blocked" and
- * "Unsupported". Never throws: any failure degrades to a described state.
+ * Every distinct reason the toggle may need to explain. Keeping them as named
+ * strings (not booleans) is what lets the UI say *why* notifications are
+ * unavailable instead of a single vague sentence that hides a misconfigured
+ * server behind "not available right now".
+ */
+export const PUSH_REASON = {
+  UNSUPPORTED: "unsupported",
+  SERVICE_WORKER: "service_worker_unavailable",
+  AUTH: "auth_required",
+  SERVER: "server_error",
+  NOT_CONFIGURED: "not_configured",
+  DENIED: "permission_denied",
+  SUBSCRIPTION_FAILED: "subscription_failed",
+};
+
+/**
+ * What the UI needs to decide between "Enable", "Enabled", "Blocked",
+ * "Unsupported" and "Server not configured". Never throws: any failure degrades
+ * to a described state with a `reason`.
  */
 export async function loadPushStatus({ signal } = {}) {
   if (!pushSupported()) {
-    return { supported: false, configured: false, permission: "unsupported", subscribed: false };
+    return {
+      supported: false,
+      configured: false,
+      permission: "unsupported",
+      subscribed: false,
+      reason: PUSH_REASON.UNSUPPORTED,
+    };
   }
 
+  // A browser can support PushManager but fail to register the worker (private
+  // mode, a blocked scope, a stale broken registration). That is a distinct
+  // state from "this browser has no push", so it gets its own reason.
   let registration = null;
   try {
     registration = await serviceWorkerRegistration();
   } catch {
-    return { supported: false, configured: false, permission: "unsupported", subscribed: false };
+    return {
+      supported: true,
+      configured: false,
+      permission: notificationPermission(),
+      subscribed: false,
+      reason: PUSH_REASON.SERVICE_WORKER,
+    };
   }
 
-  let config = { configured: false, role: null };
+  let config = null;
+  let configError = null;
   try {
     config = await getPushConfig({ signal });
-  } catch {
-    /* offline or unauthenticated — the toggle simply reports not-configured */
+  } catch (error) {
+    configError = error;
   }
 
   let subscribed = false;
@@ -78,12 +111,27 @@ export async function loadPushStatus({ signal } = {}) {
     subscribed = false;
   }
 
+  const permission = notificationPermission();
+
+  // Precedence: a failed server call is the most actionable (and, for a signed-in
+  // admin, almost always a dead session); then a server that answered but has no
+  // VAPID keys; then a blocked permission; otherwise everything is fine.
+  let reason = null;
+  if (configError) {
+    reason = configError.status === 401 ? PUSH_REASON.AUTH : PUSH_REASON.SERVER;
+  } else if (!config?.configured) {
+    reason = PUSH_REASON.NOT_CONFIGURED;
+  } else if (permission === "denied") {
+    reason = PUSH_REASON.DENIED;
+  }
+
   return {
     supported: true,
     configured: Boolean(config?.configured),
     role: config?.role ?? null,
-    permission: notificationPermission(),
-    subscribed: subscribed && notificationPermission() === "granted",
+    permission,
+    subscribed: subscribed && permission === "granted",
+    reason,
   };
 }
 
@@ -95,11 +143,23 @@ export async function loadPushStatus({ signal } = {}) {
  * "blocked" copy rather than an error.
  */
 export async function enablePush() {
-  if (!pushSupported()) return { ok: false, reason: "unsupported" };
+  if (!pushSupported()) return { ok: false, reason: PUSH_REASON.UNSUPPORTED };
 
-  const config = await getPushConfig();
+  let config;
+  try {
+    config = await getPushConfig();
+  } catch (error) {
+    // A 401 here means the session the endpoint needs is gone; anything else is
+    // the server being unreachable. Neither should ever reach the caller as an
+    // exception — the toggle has copy for both.
+    return {
+      ok: false,
+      reason: error?.status === 401 ? PUSH_REASON.AUTH : PUSH_REASON.SERVER,
+      error,
+    };
+  }
   if (!config?.configured || !config.publicKey) {
-    return { ok: false, reason: "not_configured" };
+    return { ok: false, reason: PUSH_REASON.NOT_CONFIGURED };
   }
 
   // Permission must be requested from a user gesture — this function is only
@@ -108,16 +168,30 @@ export async function enablePush() {
     Notification.permission === "granted"
       ? "granted"
       : await Notification.requestPermission().catch(() => "denied");
-  if (permission !== "granted") return { ok: false, reason: "denied" };
+  if (permission !== "granted") return { ok: false, reason: PUSH_REASON.DENIED };
 
-  const registration = await serviceWorkerRegistration();
-  const existing = await registration.pushManager.getSubscription();
-  const subscription =
-    existing ??
-    (await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(config.publicKey),
-    }));
+  let registration;
+  try {
+    registration = await serviceWorkerRegistration();
+  } catch (error) {
+    return { ok: false, reason: PUSH_REASON.SERVICE_WORKER, error };
+  }
+
+  let subscription;
+  try {
+    const existing = await registration.pushManager.getSubscription();
+    subscription =
+      existing ??
+      (await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+      }));
+  } catch (error) {
+    // The browser refused to create the subscription — most often a malformed
+    // applicationServerKey or a browser/OS policy. Distinct from the server
+    // rejecting a valid subscription below.
+    return { ok: false, reason: PUSH_REASON.SUBSCRIPTION_FAILED, error };
+  }
 
   try {
     await savePushSubscription(subscription);
@@ -125,7 +199,7 @@ export async function enablePush() {
     // The browser subscription exists but the server did not accept it. Drop it
     // so a retry starts clean rather than reusing an unregistered subscription.
     await subscription.unsubscribe().catch(() => {});
-    throw error;
+    return { ok: false, reason: PUSH_REASON.SERVER, error };
   }
   return { ok: true, reason: null };
 }

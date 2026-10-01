@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Bell, BellOff, Loader2 } from "lucide-react";
-import { loadPushStatus, enablePush, disablePush } from "../lib/push";
+import { loadPushStatus, enablePush, disablePush, PUSH_REASON } from "../lib/push";
 import styles from "./account.module.css";
 
 /**
@@ -13,6 +13,11 @@ import styles from "./account.module.css";
  * Permission is requested from the click that enables notifications, never on
  * mount. A denied state is explained and left alone — there is no prompt loop,
  * because a site cannot re-prompt once it has been blocked.
+ *
+ * Every unavailable state names its actual cause. A single "not available right
+ * now" used to cover a browser without push, a blocked permission, a domain
+ * without a service worker, a missing VAPID key and an unreachable endpoint —
+ * so a fixable configuration problem looked like a dead feature.
  */
 export default function NotificationToggle({ audience = "customer" }) {
   const [status, setStatus] = useState({ state: "loading" });
@@ -29,7 +34,7 @@ export default function NotificationToggle({ audience = "customer" }) {
   }, []);
 
   const title = "Order notifications";
-  const note =
+  const intro =
     audience === "admin"
       ? "Get a push on this device when a new order arrives."
       : "Get a push when JOC confirms your order.";
@@ -39,8 +44,10 @@ export default function NotificationToggle({ audience = "customer" }) {
     setBusy(true);
     try {
       const result = await enablePush();
-      if (!result.ok && result.reason === "denied") {
-        setStatus((current) => ({ ...current, permission: "denied", subscribed: false }));
+      if (!result.ok) {
+        // Keep whatever the last good status knew (role, permission) and record
+        // the specific reason so the copy below explains it.
+        setStatus((current) => ({ ...current, subscribed: false, reason: result.reason }));
       } else {
         setStatus({ state: "ready", ...(await loadPushStatus()) });
       }
@@ -69,62 +76,100 @@ export default function NotificationToggle({ audience = "customer" }) {
     );
   }
 
-  if (!status.supported) {
+  // Fully working and subscribed: the only state with a "Disable" action.
+  if (status.configured && status.subscribed && status.reason !== PUSH_REASON.DENIED) {
     return (
-      <div className={styles.toggle}>
-        <BellOff size={18} aria-hidden="true" />
-        <div className={styles.toggleText}>
-          <p className={styles.toggleTitle}>{title}</p>
-          <p className={styles.toggleNote}>This browser does not support order notifications.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!status.configured) {
-    return (
-      <div className={styles.toggle}>
-        <BellOff size={18} aria-hidden="true" />
-        <div className={styles.toggleText}>
-          <p className={styles.toggleTitle}>{title}</p>
-          <p className={styles.toggleNote}>Order notifications are not available right now.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (status.permission === "denied") {
-    return (
-      <div className={styles.toggle}>
-        <BellOff size={18} aria-hidden="true" />
-        <div className={styles.toggleText}>
-          <p className={styles.toggleTitle}>{title}</p>
-          <p className={styles.toggleNote}>
-            Notifications are blocked in your browser. Enable them in your browser/site settings.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={styles.toggle}>
-      {status.subscribed ? <Bell size={18} aria-hidden="true" /> : <BellOff size={18} aria-hidden="true" />}
-      <div className={styles.toggleText}>
-        <p className={styles.toggleTitle}>{title}</p>
-        <p className={styles.toggleNote}>
-          {status.subscribed ? "Enabled on this device." : note}
-        </p>
-      </div>
-      {status.subscribed ? (
+      <Frame icon={<Bell size={18} aria-hidden="true" />} title={title} note="Enabled on this device.">
         <button type="button" className="btn btn--ghost" onClick={onDisable} disabled={busy}>
           {busy ? "Turning off…" : "Disable"}
         </button>
-      ) : (
-        <button type="button" className="btn btn--primary" onClick={onEnable} disabled={busy}>
-          {busy ? "Enabling…" : "Enable Notifications"}
-        </button>
-      )}
+      </Frame>
+    );
+  }
+
+  const blocked = blockedState(status.reason, audience);
+  if (blocked) {
+    return (
+      <Frame icon={<BellOff size={18} aria-hidden="true" />} title={title} note={blocked.note}>
+        {blocked.retry ? (
+          <button type="button" className="btn btn--primary" onClick={onEnable} disabled={busy}>
+            {busy ? "Enabling…" : "Try Again"}
+          </button>
+        ) : null}
+      </Frame>
+    );
+  }
+
+  // Nothing wrong: prompt the person to turn it on. Permission is only requested
+  // from this click.
+  return (
+    <Frame icon={<BellOff size={18} aria-hidden="true" />} title={title} note={intro}>
+      <button type="button" className="btn btn--primary" onClick={onEnable} disabled={busy}>
+        {busy ? "Enabling…" : "Enable Order Notifications"}
+      </button>
+    </Frame>
+  );
+}
+
+function Frame({ icon, title, note, children }) {
+  return (
+    <div className={styles.toggle}>
+      {icon}
+      <div className={styles.toggleText}>
+        <p className={styles.toggleTitle}>{title}</p>
+        <p className={styles.toggleNote}>{note}</p>
+      </div>
+      {children}
     </div>
   );
+}
+
+/**
+ * The specific explanation for a non-working state, or null when the toggle is
+ * ready to be enabled. `retry: true` means "Try Again" is worth offering, so a
+ * transient endpoint failure is not a dead end.
+ */
+function blockedState(reason, audience) {
+  switch (reason) {
+    case PUSH_REASON.UNSUPPORTED:
+      return {
+        note: "This browser does not support order notifications.",
+        retry: false,
+      };
+    case PUSH_REASON.SERVICE_WORKER:
+      return {
+        note: "Notifications could not start on this device. Reload the page, or try a different browser.",
+        retry: false,
+      };
+    case PUSH_REASON.AUTH:
+      return {
+        note: "Your sign-in has expired. Sign in again to manage notifications.",
+        retry: false,
+      };
+    case PUSH_REASON.SERVER:
+      return {
+        note: "We could not reach the notification service just now. Please try again.",
+        retry: true,
+      };
+    case PUSH_REASON.NOT_CONFIGURED:
+      return {
+        note:
+          audience === "admin"
+            ? "Order notifications are not set up on this server yet — the VAPID keys are missing."
+            : "Order notifications are not available yet. You can still follow your order under My Orders.",
+        retry: false,
+      };
+    case PUSH_REASON.DENIED:
+      return {
+        note: "Notifications are blocked in your browser. Allow them for this site in your browser settings, then reload this page.",
+        retry: false,
+      };
+    case PUSH_REASON.SUBSCRIPTION_FAILED:
+      return {
+        note: "Your browser could not create a notification subscription. Check that notifications are allowed for this site, then try again.",
+        retry: true,
+      };
+    default:
+      return null;
+  }
 }

@@ -7,6 +7,7 @@ import {
   Loader2,
   Mail,
   MapPin,
+  MessageCircle,
   Phone,
   RefreshCw,
   ShoppingBag,
@@ -29,6 +30,7 @@ import {
   customerPaymentState,
 } from "../../../shared/ordering.js";
 import { DELIVERY_AREA_PENDING_NOTE } from "../../../shared/delivery.js";
+import { whatsappUrl } from "../../data/business";
 import { getOrderDetail } from "../../lib/api";
 import { useOrderFlow, isBusy } from "../../lib/useOrderFlow";
 import UpiPaymentPanel from "./UpiPaymentPanel";
@@ -206,6 +208,18 @@ export default function OrderConfirmation({
               <ShoppingBag size={17} aria-hidden="true" />
               Back to the menu
             </a>
+            {/* The order id is in the URL even when the lookup failed, so it is
+                the one useful thing this page can hand over. No tracking token
+                is ever put in a WhatsApp message. */}
+            <a
+              className="btn btn--whatsapp"
+              href={whatsappUrl(`Hello JOC, I need help with my order ${orderId}.`)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <MessageCircle size={17} aria-hidden="true" />
+              WhatsApp Us
+            </a>
           </div>
         </div>
       </Shell>
@@ -278,6 +292,17 @@ export default function OrderConfirmation({
             <a className="btn btn--ghost" href="#/cart">
               <ShoppingBag size={17} aria-hidden="true" />
               Return to Cart
+            </a>
+            <a
+              className="btn btn--whatsapp"
+              href={whatsappUrl(
+                `Hello JOC, I need help with my order ${order.orderId} (payment not completed).`,
+              )}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <MessageCircle size={17} aria-hidden="true" />
+              WhatsApp Us
             </a>
           </div>
         </div>
@@ -432,6 +457,16 @@ export default function OrderConfirmation({
               {refreshing ? "Refreshing…" : "Refresh status"}
             </button>
           ) : null}
+          {/* The order id travels in the message, never the tracking token. */}
+          <a
+            className="btn btn--whatsapp"
+            href={whatsappUrl(`Hello JOC, I need help with my order ${order.orderId}.`)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <MessageCircle size={17} aria-hidden="true" />
+            WhatsApp Us
+          </a>
         </div>
 
         {refreshError ? (

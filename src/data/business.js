@@ -57,9 +57,20 @@ export const CONTACT = {
     "Hi Anmol, I saw the JOC Juice and Cafe website demo and would like to know more about the website.",
 };
 
-export const WHATSAPP_URL = `https://wa.me/${CONTACT.phoneDigits}?text=${encodeURIComponent(
-  CONTACT.whatsappMessage,
-)}`;
+/**
+ * Build a WhatsApp deep link from the single configured number.
+ *
+ * The number lives in CONTACT.phoneDigits and nowhere else. Every WhatsApp
+ * action — the footer, the sticky CTA, an order on the tracking page, an order in
+ * My Orders — calls this with its own pre-filled message, so no component
+ * hard-codes the number and none can drift from it. The message is always
+ * URL-encoded; callers must NOT put an order's tracking token in it (a message
+ * is a chat log, not a secure channel).
+ */
+export const whatsappUrl = (message = CONTACT.whatsappMessage) =>
+  `https://wa.me/${CONTACT.phoneDigits}?text=${encodeURIComponent(message)}`;
+
+export const WHATSAPP_URL = whatsappUrl();
 
 export const MAILTO_URL = `mailto:${CONTACT.email}?subject=${encodeURIComponent(
   "Enquiry about the JOC Juice and Cafe website concept",

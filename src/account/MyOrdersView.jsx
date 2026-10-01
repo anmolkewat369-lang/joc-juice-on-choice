@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2, MessageCircle } from "lucide-react";
 import { useCustomer } from "./AuthProvider";
 import NotificationToggle from "./NotificationToggle";
 import { loginHref, myOrdersHref } from "./accountRoute";
 import { getMyOrders, adoptOrderToken } from "../lib/api";
 import { orderTrackingHref } from "../lib/route";
+import { whatsappUrl } from "../data/business";
 import { formatPrice } from "../data/menu";
 import {
   ORDER_STATUS_LABELS,
@@ -118,13 +119,27 @@ function OrderCard({ order }) {
         </span>
       </div>
 
-      {order.trackingToken ? (
-        <div className={styles.orderFoot}>
+      <div className={styles.orderFoot}>
+        {order.trackingToken ? (
           <button type="button" className="btn btn--primary" onClick={viewOrder}>
             View Order
           </button>
-        </div>
-      ) : null}
+        ) : (
+          <span />
+        )}
+        {/* Help is offered on every order, not only ones with a live tracking
+            token, and always names the order id so the conversation has context.
+            The tracking token is deliberately never included. */}
+        <a
+          className="btn btn--whatsapp"
+          href={whatsappUrl(`Hello JOC, I need help with my order ${order.orderId}.`)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <MessageCircle size={16} aria-hidden="true" />
+          WhatsApp Help
+        </a>
+      </div>
     </li>
   );
 }

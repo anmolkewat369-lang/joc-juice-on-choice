@@ -33,9 +33,13 @@
   pointer-events: none;
 }
 
+.whatsapp,
 .map {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   padding-block: 0.8rem;
+  padding-inline: 0.65rem;
+  white-space: nowrap;
 }
 
 @media (min-width: 900px) {

@@ -34,10 +34,15 @@ export default async function handler(req, res) {
     return sendJson(res, 200, { configured: true, signedIn: false, admin: null });
   }
 
+  // `verifySessionToken` returns a flat identity ({ id, email, expiresAt }),
+  // unlike `createSessionToken`, which returns `{ token, payload, maxAge }`.
+  // Reading `session.payload` here threw a TypeError on every refresh, so this
+  // route answered 500 and the client treated the admin as signed out. Read the
+  // flat shape the verifier actually returns.
   return sendJson(res, 200, {
     configured: true,
     signedIn: true,
-    admin: { id: session.payload.sub, email: session.payload.email },
-    expiresAt: new Date(session.payload.exp * 1000).toISOString(),
+    admin: { id: session.id, email: session.email },
+    expiresAt: new Date(session.expiresAt * 1000).toISOString(),
   });
 }

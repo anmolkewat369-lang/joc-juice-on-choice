@@ -89,6 +89,42 @@ try {
   process.exitCode = 1;
 }
 
+/* ----------------------- render the real sticky CTA ----------------------- */
+
+let ctaHtml = "";
+try {
+  const bundleDir = join(ROOT, "node_modules", ".cache", "joc-sticky-check");
+  rmSync(bundleDir, { recursive: true, force: true });
+  mkdirSync(bundleDir, { recursive: true });
+  try {
+    execFileSync(
+      process.execPath,
+      [
+        join(ROOT, "node_modules", "vite", "bin", "vite.js"),
+        "build",
+        "--ssr",
+        "src/components/StickyCta.jsx",
+        "--outDir",
+        bundleDir,
+        "--logLevel",
+        "silent",
+        "--emptyOutDir",
+      ],
+      { cwd: ROOT, stdio: ["ignore", "ignore", "pipe"], encoding: "utf8" },
+    );
+    const { default: StickyCta } = await import(
+      pathToFileURL(join(bundleDir, "StickyCta.js")).href
+    );
+    ctaHtml = renderToStaticMarkup(createElement(StickyCta));
+  } finally {
+    rmSync(bundleDir, { recursive: true, force: true });
+  }
+} catch (error) {
+  console.log("FAIL  the sticky CTA could not be rendered");
+  console.log(String(error?.stdout || error?.message || error));
+  process.exitCode = 1;
+}
+
 /* --------------------------- the contact block --------------------------- */
 
 check("the footer renders the Contact Us details", () => {
@@ -235,6 +271,45 @@ check("the number in the footer is the one this project already used", () => {
   );
 });
 
-const TOTAL = 9;
+/* ------------- the mobile sticky bar offers both key actions ------------- */
+
+check("the mobile sticky CTA carries WhatsApp and Get Directions", () => {
+  assert.ok(ctaHtml.length > 100, "the sticky CTA rendered almost nothing");
+  const wa = ctaHtml.match(/href="(https:\/\/wa\.me[^"]*)"/);
+  assert.ok(wa, "the sticky CTA has no WhatsApp action");
+  assert.ok(
+    wa[1].includes(CONFIGURED_NUMBER),
+    `the sticky WhatsApp action points at ${wa[1]} instead of ${CONFIGURED_NUMBER}`,
+  );
+  assert.match(wa[1], /[?&]text=/, "the sticky WhatsApp action has no prefilled message");
+  assert.match(wa[1], /%20/, "the sticky WhatsApp message is not URL-encoded");
+  assert.match(
+    ctaHtml,
+    /href="https:\/\/maps\.app\.goo\.gl\/[^"]*"/,
+    "the sticky CTA lost its Get Directions action",
+  );
+  assert.match(ctaHtml, /Get Directions/);
+});
+
+check("every WhatsApp action builds from the one helper, without an order token", () => {
+  assert.match(
+    read("src/data/business.js"),
+    /export const whatsappUrl\b/,
+    "business.js has no shared whatsappUrl helper",
+  );
+  const tracking = read("src/components/order/OrderConfirmation.jsx");
+  assert.match(tracking, /whatsappUrl\(/, "the tracking page uses no shared WhatsApp helper");
+  assert.doesNotMatch(tracking, /wa\.me/, "the tracking page hard-codes a wa.me number");
+  assert.doesNotMatch(
+    tracking,
+    /whatsappUrl\([^)]*trackingToken/,
+    "the tracking page puts the tracking token in a WhatsApp message",
+  );
+  const mine = read("src/account/MyOrdersView.jsx");
+  assert.match(mine, /whatsappUrl\(/, "My Orders uses no shared WhatsApp helper");
+  assert.doesNotMatch(mine, /wa\.me/, "My Orders hard-codes a wa.me number");
+});
+
+const TOTAL = 11;
 console.log(`\n${passed}/${TOTAL} footer checks passed`);
 if (process.exitCode) console.log("footer checks FAILED");

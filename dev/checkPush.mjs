@@ -391,6 +391,35 @@ check("a signed-in customer is told their own role and the public key", async ()
   assert.equal(res.payload.publicKey, PUBLIC_KEY);
 });
 
+check("a signed-in admin is told the admin role and can save a subscription", async () => {
+  process.env.JOC_ADMIN_SESSION_SECRET = "an-admin-test-secret-that-is-long-enough-xxxx";
+  const { createSessionToken } = await import("../api/_lib/adminAuth.js");
+  const cookie = `joc_admin_session=${
+    createSessionToken({ id: "admin-1", email: "ops@joc.test" }).token
+  }`;
+
+  const get = await callRoute("../api/push/subscribe.js", {
+    method: "GET",
+    headers: { cookie },
+  });
+  assert.equal(get.statusCode, 200, JSON.stringify(get.payload));
+  assert.equal(get.payload.role, "admin", "an admin cookie must map to the admin role, not customer");
+  assert.equal(get.payload.publicKey, PUBLIC_KEY);
+
+  const post = await callRoute("../api/push/subscribe.js", {
+    method: "POST",
+    headers: { cookie },
+    body: { endpoint: "https://push.test/admin-1", keys: { p256dh: "p", auth: "a" } },
+  });
+  assert.equal(post.statusCode, 201, JSON.stringify(post.payload));
+  assert.equal(post.payload.role, "admin", "the stored role is the server-decided admin role");
+
+  // And it is stored under the admin identity, so the next new order reaches it.
+  const store = await getStore();
+  const rows = await store.listPushSubscriptions({ role: "admin", userId: "admin-1" });
+  assert.equal(rows.length, 1, "the admin subscription was not persisted");
+});
+
 check("a subscription with an invalid endpoint is refused", async () => {
   process.env.JOC_CUSTOMER_SESSION_SECRET = "a-customer-test-secret-that-is-long-enough-xxxx";
   const token = createCustomerSession({ id: "cust-a", email: "a@b.test" }).token;

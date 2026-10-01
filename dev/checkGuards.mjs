@@ -305,6 +305,38 @@ check("a valid admin session cookie is accepted", async () => {
   assert.ok(Array.isArray(res.payload.orders), "expected an orders array");
 });
 
+check("GET /api/admin/session reports the signed-in admin after a refresh", async () => {
+  // The regression: this route read the verifier's return value as if it were
+  // the minter's, threw, answered 500, and the dashboard logged the admin out on
+  // every reload. The check asserts the identity round-trips, not just a 200.
+  process.env.JOC_ADMIN_SESSION_SECRET = "a-test-secret-that-is-definitely-long-enough-x";
+  const savedUrl = process.env.SUPABASE_URL;
+  const savedAnon = process.env.SUPABASE_ANON_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_ANON_KEY = "test-anon-key";
+  try {
+    const { createSessionToken } = await import("../api/_lib/adminAuth.js");
+    const { token } = createSessionToken({ id: "auth-user-1", email: admin.email });
+    const res = await callRoute("../api/admin/session.js", {
+      method: "GET",
+      headers: { cookie: `joc_admin_session=${token}` },
+    });
+    assert.equal(res.statusCode, 200, `expected 200, got ${res.statusCode}`);
+    assert.equal(res.payload.signedIn, true, "a valid cookie must read as signed in");
+    assert.equal(res.payload.admin.id, "auth-user-1", "the admin id must survive the refresh");
+    assert.equal(res.payload.admin.email, admin.email, "the admin email must survive the refresh");
+    assert.ok(
+      !Number.isNaN(Date.parse(res.payload.expiresAt)),
+      "expiresAt must be a real date, not Invalid Date",
+    );
+  } finally {
+    if (savedUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = savedUrl;
+    if (savedAnon === undefined) delete process.env.SUPABASE_ANON_KEY;
+    else process.env.SUPABASE_ANON_KEY = savedAnon;
+  }
+});
+
 check("a session cookie signed with a different secret is rejected", async () => {
   const { createSessionToken } = await import("../api/_lib/adminAuth.js");
   process.env.JOC_ADMIN_SESSION_SECRET = "the-first-secret-that-is-long-enough-xxxxx";

@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { MapPin } from "lucide-react";
-import { LINKS } from "../data/business";
+import { MapPin, MessageCircle } from "lucide-react";
+import { LINKS, whatsappUrl } from "../data/business";
 import styles from "./StickyCta.module.css";
 
 /**
  * Compact mobile action bar. Appears after the hero, and steps aside once the
  * location section is on screen so it never covers the address details.
+ *
+ * Two actions, not one: a phone user half-way down the page gets to start a
+ * WhatsApp conversation as easily as they get directions. The number comes from
+ * src/data/business.js via whatsappUrl — nothing is hard-coded here.
  */
 export default function StickyCta() {
   const [visible, setVisible] = useState(false);
@@ -38,12 +42,21 @@ export default function StickyCta() {
       className={`${styles.bar} ${visible ? styles.barVisible : ""} ${hidden ? styles.barHidden : ""}`}
     >
       <a
-        className={`btn btn--primary btn--block ${styles.map}`}
+        className={`btn btn--whatsapp ${styles.whatsapp}`}
+        href={whatsappUrl("Hello JOC, I have an enquiry about JOC Juice and Cafe.")}
+        target="_blank"
+        rel="noreferrer"
+      >
+        <MessageCircle size={18} aria-hidden="true" />
+        WhatsApp
+      </a>
+      <a
+        className={`btn btn--primary ${styles.map}`}
         href={LINKS.maps}
         target="_blank"
         rel="noreferrer"
       >
-        <MapPin size={19} aria-hidden="true" />
+        <MapPin size={18} aria-hidden="true" />
         Get Directions
       </a>
     </div>
