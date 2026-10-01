@@ -35,6 +35,11 @@ export function readIdempotencyKey(req) {
  * The browser supplies ids, quantities and customer text — and nothing about
  * money. Subtotal, delivery charge and total are all computed here from the
  * shared menu data, so a tampered payload cannot change what is charged.
+ *
+ * The delivery area arrives the same way: the customer picks one from the
+ * configured list and confirms their address, `validateCheckout` checks both
+ * against that list, and this record carries the normalised id, the label resolved
+ * from the list and a real boolean. No distance is measured and none is stored.
  */
 export function buildOrderRecord(body) {
   const { errors, valid, value } = validateCheckout(body);
@@ -60,6 +65,17 @@ export function buildOrderRecord(body) {
     );
   }
 
+  /**
+   * One secret per order, used for two purposes: it is handed to the customer on
+   * creation, and it is the token in the emailed tracking link.
+   *
+   * Two separate secrets would have to be rotated together, would double the number
+   * of values that could leak, and would let one be used where the other was not
+   * intended. One secret means a single rotation invalidates every outstanding
+   * tracking link, which is the revocation story an operator wants.
+   */
+  const accessToken = newAccessToken();
+
   return {
     customerName: value.name,
     phone: value.phone,
@@ -68,6 +84,15 @@ export function buildOrderRecord(body) {
     address: value.address,
     landmark: value.landmark,
     specialInstructions: value.instructions,
+    // The area the customer chose, already checked against the configured list by
+    // validateCheckout. `deliveryAreaName` is resolved from that list rather than
+    // submitted, so it cannot be a string an attacker chose.
+    deliveryArea: value.deliveryArea,
+    deliveryAreaName: value.deliveryAreaName,
+    // The customer's own statement that the address is correct and inside JOC's
+    // area. A true boolean, always true here: an order that reached this point has
+    // the confirmation, and a false one never reaches persistence at all.
+    deliveryAreaConfirmed: value.deliveryAreaConfirmed,
     items: lines,
     subtotal: totals.subtotal,
     deliveryCharge: totals.deliveryCharge,
@@ -85,43 +110,11 @@ export function buildOrderRecord(body) {
     // either.
     paymentStatus: PAYMENT_STATUS.PENDING,
     orderStatus: ORDER_STATUS.RECEIVED,
-    accessToken: newAccessToken(),
-    /**
-     * The emailed tracking link is built from the SAME secret the customer is
-     * given at order time — one secret per order, not two.
-     *
-     * Two separate secrets would have to be rotated together, would double the
-     * number of values that could leak, and would let one be used where the other
-     * was not intended. Reusing it means a single rotation invalidates every
-     * outstanding link, which is the revocation story an operator wants.
-     */
-    trackingToken: undefined,
-    // Filled in by the order route from the delivery check it performed. Kept as
-    // an explicit field so `createOrder` has one obvious place to read it from and
-    // nothing can accidentally persist a check that never happened.
-    delivery: null,
-  };
-}
-
-/**
- * Attach the delivery verification and the tracking token to a priced record.
- *
- * Kept separate from buildOrderRecord because the check happens between pricing
- * and persistence, and the ordering matters: price -> verify -> persist. A
- * function that built the whole record at once would make it too easy to reorder
- * those three steps and persist an unverified order.
- */
-export function withDeliveryVerification(record, checked, checkedAt = new Date().toISOString()) {
-  return {
-    ...record,
-    delivery: {
-      outcome: checked.outcome,
-      eligible: checked.eligible,
-      distanceMeters: checked.distanceMeters,
-      radiusKm: checked.radiusKm,
-      checkedAt,
-    },
-    trackingToken: record.accessToken,
+    accessToken,
+    // The tracking link is built from that same secret. Stamped here rather than
+    // later because there is no asynchronous delivery step between pricing and
+    // persistence any more — the area was already validated as part of `value`.
+    trackingToken: accessToken,
   };
 }
 

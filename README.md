@@ -41,19 +41,25 @@ them work against the in-memory store, so none needs a database or a network.
 
 | Script | What it pins down |
 | --- | --- |
-| `dev/checkGuards.mjs` | 53 checks over the guard rules: order-token ownership, UTR normalisation, admin auth (unauthenticated, forged cookie, no session secret), status-transition legality, `PAID` reachable only by admin, the checkout field-error contract, and that COD never asks the customer to pay online |
-| `dev/checkDelivery.mjs` | 26 checks on the 4 km rule: inclusive metre comparison, clamped radius input, every refusal outcome, fail-closed behaviour when Google is missing/broken/unconfigured, the order route refusing out-of-range orders, idempotent replay, and that the customer cannot post their own verdict |
+| `dev/checkGuards.mjs` | 60 checks over the guard rules: order-token ownership, UTR normalisation, admin auth (unauthenticated, forged cookie, no session secret), status-transition legality, `PAID` reachable only by admin, the checkout field-error contract, area and address-confirmation enforcement, that placing an order makes no outbound call, and that COD never asks the customer to pay online |
+| `dev/checkDelivery.mjs` | 28 checks on the delivery-area rule: the area list is well-formed and duplicate-free, membership is checked after normalising case and whitespace, prototype keys are refused, the confirmation must be exactly `true`, the API refuses a missing/unsupported area and an unconfirmed address, a placed order carries no distance and triggers no outbound request, the browser sends every field the contract can refuse, and **no file under `api/`, `shared/` or `src/` mentions a maps provider, a radius or a coordinate** |
+| `dev/checkPostgres.mjs` | 11 checks on the **durable** driver, driven against a stub `pg` pool: `delivery_area` and `delivery_area_confirmed` are in the real `INSERT` with the right values, the customer's name/phone/email/address/landmark/instructions are all still stored, no legacy distance column is written, and a row read back out carries the area, its label, the confirmation, the address and the landmark to the admin |
 | `dev/checkNotifications.mjs` | 17 checks on the send ledger: exactly-once under repeated and concurrent triggers, distinct-status dedupe, skipped-vs-failed recording, a broken provider never failing an order, an unreachable ledger still sending, and the tracking token never appearing in a payload |
 | `dev/checkQr.mjs` | Decodes the server-generated UPI QR with **jsQR** — an independent implementation — across every payload length 1..213, several error-correction levels, and realistic `upi://pay` intent strings |
 
 The QR encoder in `api/_lib/qr.js` is hand-written, so it is deliberately checked
 against a decoder that is not itself rather than against its own output.
 
-The delivery and notification suites stub `fetch`, not the module that calls it,
-so the real `checkDelivery`, the real Resend transport and the real ledger are all
-exercised; only the network is replaced. `dev/checkGuards.mjs` stubs Google the same
-way, which is what lets the mandatory delivery check stay mandatory in every
-end-to-end order case.
+The notification suite stubs `fetch`, not the module that calls it, so the real
+Resend transport and the real ledger are exercised and only the network is replaced.
+`dev/checkDelivery.mjs` needs no stub at all, because there is nothing left to call:
+the rule is a list lookup and a boolean.
+
+Most of `npm test` runs against the in-memory store, because CI has no database.
+`dev/checkPostgres.mjs` is the exception: it replaces `pg.Pool` before the store
+imports it and reads the SQL the durable driver produces. Without it, the driver
+production actually uses would be untested — a delivery area that validates, appears
+in the API response and is written by nothing would pass every other suite.
 
 ## How ordering works
 
@@ -61,16 +67,17 @@ end-to-end order case.
   namespace. The existing homepage sections and anchors are untouched.
 - **Shared contract**: `shared/ordering.js` and `shared/delivery.js` are imported by
   both the frontend and the API so price calculation, limits, phone validation,
-  delivery wording and the distance rule cannot drift.
+  delivery wording, the area list and the confirmation rule cannot drift.
 - **Server-side prices**: the API recomputes every total from `src/data/menu.js`
   and rejects unknown ids or quantities. The localStorage cart is a shopping bag,
   never the database.
 - **Idempotency**: every submission carries an `Idempotency-Key`; a double click,
   refresh or retry resolves to the same order. The replay is resolved *before* the
-  delivery check, so re-sending a request never costs a Google call and never
-  invalidates an order already placed.
-- **Delivery area**: 4 km of driving distance, measured by the Google Routes API
-  and compared in whole metres. See [The delivery rule](#the-delivery-rule).
+  order is validated and stored, so re-sending a request never creates a second
+  order and never invalidates an order already placed.
+- **Delivery area**: a published list of areas the customer picks from, plus their
+  explicit confirmation of the address. See
+  [The delivery rule](#the-delivery-rule).
 - **Order lookup**: order ids (e.g. `JOC-20260928-0001`) are public, so lookup
   requires a per-order secret. It is returned once at creation, kept in
   `sessionStorage`, and sent as an `X-Order-Token` header (never in the URL).
@@ -92,59 +99,64 @@ end-to-end order case.
 - **The browser is never trusted with money or with delivery**: totals are priced
   server-side from the shared menu, `payment_provider` and `payment_status` are
   stamped server-side, the UPI ID/amount/deep link/QR are built by the server, and
-  the delivery distance is measured and stored by the server at order time.
+  the delivery area is re-validated against the configured list at order time.
 - **Failure is honest**: a failed/cancelled payment lands on an explicit failure
   screen, never a fake success, with Retry and Change-to-COD options that operate
   on the same stored order.
 
 ## The delivery rule
 
-JOC delivers only within a fixed driving distance of the store. This is the one
-rule a customer can argue with, so it is worth being precise about what it is.
+JOC no longer measures an address. It publishes a list of areas, the customer picks
+one, and they confirm that the address they typed is correct and inside it. This is
+worth being precise about, because the rule a customer can argue with should have as
+few moving parts as possible.
 
-- **It is a road distance.** `api/_lib/googleMaps.js` geocodes the typed address
-  and asks the Google Routes API for the `DRIVE` distance, `TRAFFIC_UNAWARE` so the
-  same address always measures the same. There is deliberately no Haversine
-  helper anywhere in the project — a straight-line figure is a lower bound, and
-  shipping one next to the real rule is how a crow-flies radius quietly becomes
-  the delivery policy.
-- **It is inclusive.** `distanceMeters <= radiusMeters`, compared as integers, so
-  an address exactly at 4000 m is deliverable and float noise cannot reject
-  someone standing on the boundary.
-- **It fails closed.** A missing key, missing store coordinates, an address Google
-  cannot place, an ambiguous address, a timeout or a quota error all produce "we
-  cannot deliver to that address" — never "allowed". An outage of this dependency
-  must never widen the delivery area.
-- **It is enforced in one place.** `api/_lib/delivery.js` is the only module that
-  answers the question, and `POST /api/orders` calls it itself. `POST
-  /api/delivery/check` is the checkout preview only; a caller cannot pass it a
-  friendly answer and then post something else, because the order route re-measures
-  from the request body.
-- **The measured distance is stored** on the order, so a later change to
-  `JOC_DELIVERY_RADIUS_KM` cannot silently reinterpret an order that was already
-  accepted, and so the admin dashboard shows the figure that decided the order.
+- **There is no measurement and no third party.** Nothing calls a routing or geocoding
+  API, nothing reads a coordinate, and no provider outage can widen or narrow the
+  area. `dev/checkDelivery.mjs` fails if any file under `api/`, `shared/` or `src/`
+  mentions a maps provider, a radius or a location API, so the old rule cannot creep
+  back in through a new import or an inline `fetch`.
+- **The list has exactly one home.** `src/data/deliveryAreas.js` holds the areas and
+  nothing else defines one. `shared/delivery.js` re-exports it, so the picker and the
+  API validation read the same array — an area the customer was offered is always an
+  area the server will accept.
+- **Membership is checked server-side, on the id only.** `validateDeliveryArea` in
+  `shared/delivery.js` normalises case and whitespace and then looks the id up in the
+  list. An unknown id is refused; a prototype key such as `constructor` resolves to
+  nothing rather than to a truthy object.
+- **The label comes from the list, never from the request.** A caller may post
+  `deliveryAreaName`, and it is ignored: `deliveryAreaName` on a stored order is
+  resolved from the configured list, so a hand-written request cannot make the admin
+  dashboard display a name of its choosing.
+- **The confirmation must be exactly `true`.** `false`, `"true"`, `1` and `"on"` are
+  all refused. The checkbox on the form and the field on the wire have to mean the
+  same thing, or one of them can be bypassed.
+- **It is enforced in one place.** `shared/ordering.js` calls
+  `validateDeliveryArea` inside `validateCheckout`, and `POST /api/orders` builds its
+  record from that validated value. There is no preview endpoint to disagree with: the
+  checkout preview and the order route are the same code.
+- **JOC still reviews it.** Placing an order never resolves delivery. The order
+  arrives as `RECEIVED` with the area, the exact address and the customer's
+  confirmation attached, and `/admin/orders` shows all three before the existing
+  Confirm action. The order is `CANCELLED` if it cannot be delivered.
+- **The area is stored, no measurement is.** `delivery_area` and
+  `delivery_area_confirmed` are additive columns (`db/migrations/005`). The
+  `delivery_*` distance columns from migration 004 are kept untouched as read-only
+  history rather than dropped, so orders accepted under the old rule stay readable.
 - **The cost is not affected.** `DELIVERY_CHARGE` stays 0 and the UI says "To be
   confirmed" — the area is being restricted, not the price being raised.
-- **It fits the function budget.** `vercel.json` sets `maxDuration: 30` for
-  `api/**`. The order route's worst case is two sequential Google calls (8 s
-  timeout each) followed by a Resend send; at the previous 15 s a slow provider
-  surfaced to the customer as a network error instead of an honest refusal.
-
-Configuring it: `GOOGLE_MAPS_API_KEY` (with the **Geocoding API** and **Routes API**
-enabled), `JOC_STORE_LATITUDE`, `JOC_STORE_LONGITUDE` and optionally
-`JOC_DELIVERY_RADIUS_KM`. Get the coordinates from Google Maps for the store — do
-not guess them; a wrong pin moves the whole delivery area and nothing in the app
-can tell you it is wrong.
+- **An order request now touches nothing but the database** (and email, if
+  configured). `vercel.json` still allows `maxDuration: 30` for `api/**`, but that
+  ceiling was sized for the three sequential routing calls this rule used to make;
+  it is now only a backstop on a slow database or mail provider.
 
 ### API endpoints
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/api/orders` | Create a COD or UPI order (delivery verified server-side first) |
+| POST | `/api/orders` | Create a COD or UPI order (area and address confirmation validated server-side) |
 | GET | `/api/orders/:orderId` | Look up an order (token required) |
 | POST | `/api/orders/utr` | Submit a UTR (token required) — can only reach `PAYMENT_VERIFICATION_REQUIRED` |
-| POST | `/api/delivery/check` | Checkout preview of the delivery area (not a gate) |
-| GET | `/api/delivery/config` | The radius this deployment is actually enforcing |
 | GET | `/api/payments/methods` | What this deployment can actually offer |
 | POST | `/api/payments/create` | Start a gateway session for an order |
 | POST | `/api/payments/verify` | Server-verified payment success |
@@ -154,12 +166,14 @@ can tell you it is wrong.
 | GET/PATCH | `/api/admin/orders/:orderId` | Order detail, verify a UTR, advance order status, notification audit rows |
 
 Vercel's Hobby plan allows 12 serverless functions per deployment, so
-`/api/delivery/config` is served by `api/delivery/check.js` and
-`/api/payments/methods` by `api/payments/create.js`. Both keep the URL above:
-`vercel.json` rewrites each alias onto the file that also serves the POST route,
-and the handler tells the two requests apart by path. The answers are unchanged —
-the alias is still a public read with no token, and the POST routes still
-require the order's own `X-Order-Token`.
+`/api/payments/methods` is served by `api/payments/create.js` and keeps the URL above:
+`vercel.json` rewrites the alias onto the file that also serves the POST route, and
+the handler tells the two requests apart by path. The answer is unchanged — the alias
+is still a public read with no token, and the POST routes still require the order's
+own `X-Order-Token`.
+
+Removing `/api/delivery/*` frees two of those twelve slots, which matters: every
+serverless function counts against the plan limit regardless of how small it is.
 
 Admin routes require a valid session cookie and fail closed with a 500-style
 `ApiError` when `JOC_ADMIN_SESSION_SECRET` is unset. `/admin` is a real path, not
@@ -196,9 +210,6 @@ Copy `.env.example` → `.env.local` for local development. All values are
 | `DATABASE_URL` | For durable orders | Supabase Postgres (use the transaction pooler for Vercel) |
 | `JOC_AUTO_MIGRATE` | Optional | `true` lets the API run the schema + migrations on first request; set `false` if you provision it yourself |
 | `JOC_ALLOW_MEMORY_STORE` | Optional | Only needed to force in-memory mode on a production build |
-| `GOOGLE_MAPS_API_KEY` | **Required to take any order** | Server-only secret. Needs the Geocoding API and Routes API enabled |
-| `JOC_STORE_LATITUDE` / `JOC_STORE_LONGITUDE` | **Required to take any order** | Decimal degrees for the store. Get them from Google Maps; do not guess |
-| `JOC_DELIVERY_RADIUS_KM` | Optional | Defaults to `4`; clamped to 0.5–50 so a typo cannot open or close the area |
 | `JOC_SITE_URL` | Optional | Base URL for emailed tracking links. Defaults to the production URL |
 | `JOC_PAYMENT_PROVIDER` | Optional | `manual_upi` (default) or `razorpay`. Selects which rail settles a digital payment |
 | `JOC_UPI_ID` | **For the UPI option at checkout** | The JOC UPI handle. **Not a secret** — it is shown to customers and embedded in the payment QR. Without it, checkout offers Cash on Delivery only |
@@ -209,13 +220,13 @@ Copy `.env.example` → `.env.local` for local development. All values are
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Only if provider is `razorpay` | `rzp_test_...` / `rzp_live_...`. The secret must never be committed |
 | `RAZORPAY_TEST_MODE` | Optional | Defaults `true`; live money only when explicitly `false` AND live keys are set |
 
-> **No order is accepted at all?** Almost always the delivery check: check
-> `GOOGLE_MAPS_API_KEY`, the store coordinates, and that both Google APIs are
-> enabled on the key. It fails closed by design, so a misconfiguration refuses
-> every order rather than accepting all of them. `GET /api/delivery/config` reports
-> the radius the server is enforcing, and a refused `POST /api/orders` returns a
-> `422` whose `detail.code` is `delivery_unavailable` — the reason the customer is
-> shown is the same reason the order was refused.
+> **No order is accepted at all?** With no maps provider in the path, the delivery
+> rule cannot be the cause. A refused `POST /api/orders` returns a `422` whose
+> `error.code` is `invalid_checkout` and whose `error.errors` names the offending
+> field — `deliveryArea` or `deliveryAreaConfirmed` for a delivery problem. If
+> `deliveryArea` reads "not in JOC's delivery list", the customer picked an area the
+> server does not serve, which means `src/data/deliveryAreas.js` and the deployed
+> frontend are out of step.
 
 > **Checkout shows Cash on Delivery only?** Check `JOC_UPI_ID` first. It is the
 > single variable that decides whether the UPI option appears, and the checkout
@@ -225,10 +236,9 @@ Copy `.env.example` → `.env.local` for local development. All values are
 
 ### What is and is not a secret
 
-Only five things here are secret: `DATABASE_URL` (it embeds the DB password),
-`GOOGLE_MAPS_API_KEY`, `JOC_ADMIN_SESSION_SECRET`, `RESEND_API_KEY`, and
-`RAZORPAY_KEY_SECRET` — the last only if you ever enable Razorpay. Commit none of
-them.
+Only four things here are secret: `DATABASE_URL` (it embeds the DB password),
+`JOC_ADMIN_SESSION_SECRET`, `RESEND_API_KEY`, and `RAZORPAY_KEY_SECRET` — the last
+only if you ever enable Razorpay. Commit none of them.
 
 `JOC_UPI_ID` and `SUPABASE_ANON_KEY` look sensitive but are not:
 `JOC_UPI_ID` is printed on the checkout page and embedded in the payment QR by
@@ -253,13 +263,11 @@ fragment-scoped.
    the schema and all migrations itself on first request) or set
    `JOC_AUTO_MIGRATE=false` and run `db/schema.sql` on a **new** database — or the
    files in `db/migrations/` in order on an **existing** one, in the SQL editor.
-2. **Delivery area (do this before any order can be placed)**: create a Google
-   Cloud key with the **Geocoding API** and **Routes API** enabled and set
-   `GOOGLE_MAPS_API_KEY`. Then look the store up in Google Maps, copy the
-   coordinates off the pin, and set `JOC_STORE_LATITUDE` / `JOC_STORE_LONGITUDE`.
-  `JOC_DELIVERY_RADIUS_KM` defaults to 4. Verify with
-   `GET /api/delivery/config`, then place one real test order from a nearby and a
-   far address and confirm the two verdicts.
+2. **Delivery area**: edit `src/data/deliveryAreas.js` with the areas JOC actually
+   serves. Nothing to configure and no key to obtain — place one order as a customer,
+   then read it at `/admin/orders` to confirm the area, the exact address and the
+   customer's acknowledgement all arrive, and confirm the order is `RECEIVED` until
+   you accept it.
 3. **Payments**: set `JOC_PAYMENT_PROVIDER=manual_upi` and `JOC_UPI_ID` to your
    `handle@bank`. Customers pay that ID, submit the UTR, and an admin verifies it
    at `/admin/orders`. Razorpay stays behind the same provider abstraction: switch
@@ -278,19 +286,21 @@ fragment-scoped.
 ## Project layout
 
 ```
-api/            Vercel serverless functions (orders, payments, delivery)
+api/            Vercel serverless functions (orders, payments)
 api/_lib/       Shared server code: store, schema, payments, QR, admin auth,
-                Google Maps + the delivery decision, email, notifications
+                email, notifications
 api/admin/      Admin-only routes (login, session, order list/detail)
 db/schema.sql   Postgres schema (orders, notifications, indexes, updated trigger)
 db/migrations/  Ordered migrations for an existing database (002 payment/admin,
-                003 COD, 004 delivery + email + notifications)
+                003 COD, 004 delivery + email + notifications,
+                005 delivery area + confirmation)
 shared/         Contract imported by frontend and API (ordering, delivery)
 src/admin/      Admin dashboard (lazy-loaded; never requested by a customer)
 src/cart/       Cart context, localStorage persistence
+src/data/       Content: menu, gallery, categories, business details, delivery areas
 src/lib/        Hash routing, API client, Razorpay loader, order flow state machine
 src/components/cart/    Cart page
-src/components/order/   Checkout, delivery preview, confirmation/tracking/failure
+src/components/order/   Checkout, area picker, confirmation/tracking/failure
 dev/            Local-only /api bridge for the Vite dev server, plus npm test checks
 ```
 
@@ -306,7 +316,8 @@ copy, prices or images.
 | Category highlight cards | `src/data/categories.js` |
 | Name, address, contact, disclaimer text | `src/data/business.js` |
 | **Delivery charge + free-delivery rule** | `shared/ordering.js` (`DELIVERY_CHARGE`, `FREE_DELIVERY_ABOVE`) |
-| **Delivery radius + customer-facing delivery wording** | `shared/delivery.js`, plus `JOC_DELIVERY_RADIUS_KM` |
+| **The areas JOC delivers to** | `src/data/deliveryAreas.js` — the only place an area is defined |
+| **Area labels, the confirmation wording and the pending note** | `shared/delivery.js` |
 | Design tokens, colours, type scale | `src/index.css` (`:root`) |
 | Section styles | `src/components/*.module.css` |
 
@@ -325,7 +336,7 @@ JOC logo is supplied.
 ## Factual content policy
 
 Only verifiable public information is used: business name, address, menu
-categories, currently listed items and prices, and the Google Maps location.
+categories, currently listed items and prices, and the map location link.
 
 Deliberately **not** included anywhere on the site, because none of it is
 verified:
@@ -344,10 +355,14 @@ name, address and category — no phone, no opening hours, no aggregate rating.
 ## Before going live
 
 1. Confirm the menu, prices and item descriptions with the client.
-2. **Apply `db/migrations/004_delivery_and_notifications.sql` before deploying the
-   code that writes those columns.** Use the Supabase SQL editor (or the direct
-   connection), not the transaction pooler — poolers will not run a multi-statement
-   migration file. Production should have `JOC_AUTO_MIGRATE=false`.
+2. **Confirm the area list in `src/data/deliveryAreas.js` with JOC.** This is the
+   only thing that decides where JOC delivers, and it is a business decision, not a
+   technical one. An area that is missing costs a customer; an area that is listed
+   but not really served costs a wasted trip. Then apply
+   `db/migrations/005_delivery_area_confirmation.sql` before deploying the code that
+   writes those columns — Supabase SQL editor (or a direct connection), not the
+   transaction pooler, which will not run a multi-statement migration file.
+   Production should have `JOC_AUTO_MIGRATE=false`.
 3. Confirm the **production order-handling process** (who receives orders, and how).
 4. Replace the illustrations with real photography.
 5. Replace the temporary wordmark with the official logo.
@@ -357,10 +372,11 @@ name, address and category — no phone, no opening hours, no aggregate rating.
 8. Confirm `JOC_UPI_ID` on the production deployment by reading
    `GET /api/payments/methods` — it should report `provider: manual_upi` with
    both Cash on Delivery and UPI available.
-9. Confirm `GET /api/delivery/config` reports the radius you expect, and that a
-   test order from a known-nearby address is accepted while a known-far address is
-   refused. This is the one rule where "it looks fine in the browser" is not
-   evidence.
+9. Place one test order from a real customer address and read it at
+   `/admin/orders`: the area, the exact address and the customer's confirmation
+   should all be there, and the order should sit at `RECEIVED` until you accept it.
+   This is the one flow where "it looks fine in the browser" is not evidence — the
+   confirmation the customer ticked is not the same as the address JOC can find.
 10. Set `JOC_SITE_URL` to the real domain, so tracking links in customer emails
     point at production.
 11. Run `npm test` and `npm run lint` against the final state.

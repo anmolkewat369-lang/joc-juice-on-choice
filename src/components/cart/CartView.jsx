@@ -1,7 +1,11 @@
 import { ArrowRight, ShoppingBag, Trash2 } from "lucide-react";
 import { useCart } from "../../cart/cartStore";
 import { formatPrice } from "../../data/menu";
-import { DELIVERY_LABEL, DELIVERY_NOTE } from "../../../shared/ordering.js";
+import {
+  DELIVERY_LABEL,
+  DELIVERY_NOTE,
+  DELIVERY_PENDING_LABEL,
+} from "../../../shared/ordering.js";
 import { checkoutHref } from "../../lib/route";import QtyStepper from "./QtyStepper";
 import styles from "./CartView.module.css";
 
@@ -78,7 +82,9 @@ export default function CartView() {
               </div>
               <div>
                 <dt>{DELIVERY_LABEL}</dt>
-                <dd>{deliveryCharge === 0 ? "Free" : formatPrice(deliveryCharge)}</dd>
+                <dd>
+                  {deliveryCharge > 0 ? formatPrice(deliveryCharge) : DELIVERY_PENDING_LABEL}
+                </dd>
               </div>
               <div className={styles.grand}>
                 <dt>Total</dt>

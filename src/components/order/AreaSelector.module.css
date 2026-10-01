@@ -1,0 +1,137 @@
+/* Styled to match Field.module.css, so the picker sits in the checkout form
+   without looking like a different control. Touch targets are kept at 44px+ so
+   the list is usable on a phone, which is how most orders will be placed. */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink-800);
+}
+
+.required {
+  color: var(--berry-500);
+}
+
+.search {
+  width: 100%;
+  padding: 0.8rem 0.95rem;
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  color: var(--ink-900);
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+  transition: box-shadow var(--dur-fast) var(--ease);
+  appearance: none;
+}
+
+.search::placeholder {
+  color: var(--ink-400);
+}
+
+.search:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--green-500), var(--ring);
+}
+
+.search[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 1.5px var(--berry-500);
+}
+
+.search:disabled {
+  opacity: 0.65;
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--ink-400);
+}
+
+.selected {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: var(--fs-sm);
+  color: var(--ink-800);
+}
+
+.selectedLabel {
+  color: var(--ink-400);
+}
+
+/* The scroll region is capped so a 22-item list cannot push the address fields
+   and the confirmation checkbox off the bottom of the screen. */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 15rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0.2rem 0 0;
+  padding: 0.35rem;
+  list-style: none;
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  background: var(--paper-warm);
+}
+
+.option {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.8rem;
+  border: 0;
+  border-radius: var(--radius-sm, 0.5rem);
+  background: transparent;
+  color: var(--ink-800);
+  font: inherit;
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.option:hover:not(:disabled) {
+  background: var(--paper);
+}
+
+.option:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* The selected row is marked with the site's accent rather than colour alone —
+   aria-pressed carries the same state to a screen reader. */
+.option[aria-pressed="true"] {
+  background: var(--green-600);
+  color: #fff;
+  font-weight: 600;
+}
+
+.option:disabled {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.empty {
+  padding: 0.75rem 0.5rem;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--ink-500);
+}
+
+.error {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--berry-600);
+}

@@ -25,6 +25,7 @@ import {
   PAYMENT_PROVIDER,
   CURRENCY,
 } from "../../shared/ordering.js";
+import { deliveryAreaFor } from "../../shared/delivery.js";
 import { AUTO_MIGRATE_SQL } from "./schema.js";
 
 let driverPromise = null;
@@ -111,12 +112,11 @@ function createPostgresStore() {
         `insert into joc_orders (
            idempotency_key, access_hash, customer_name, phone, customer_email,
            address, landmark, special_instructions,
-           delivery_distance_meters, delivery_radius_km, delivery_eligible,
-           delivery_outcome, delivery_checked_at,
+           delivery_area, delivery_area_confirmed,
            tracking_token,
            items, subtotal, delivery_charge, total, currency,
            payment_method, payment_status, order_status, payment_provider
-         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18,$19,$20,$21,$22,$23)
+         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20)
          on conflict (idempotency_key) do nothing
          returning *`,
         [
@@ -128,14 +128,12 @@ function createPostgresStore() {
           record.address,
           record.landmark,
           record.specialInstructions,
-          // The verification the caller already performed. Stored so an admin can
-          // see that an address was checked and how far it measured, and so a
-          // later change to the radius cannot silently reinterpret an old order.
-          record.delivery?.distanceMeters ?? null,
-          record.delivery?.radiusKm ?? null,
-          record.delivery?.eligible ?? null,
-          record.delivery?.outcome ?? null,
-          record.delivery?.checkedAt ?? null,
+          // The area the customer chose, already validated against the configured
+          // list, and their explicit confirmation of the address. Stored so an
+          // admin sees what was agreed, and so an order cannot later be
+          // reinterpreted against a different area list.
+          record.deliveryArea ?? null,
+          record.deliveryAreaConfirmed ?? null,
           record.trackingToken ?? null,
           JSON.stringify(record.items),
           record.subtotal,
@@ -180,14 +178,13 @@ function createPostgresStore() {
     },
 
     /**
-     * Look up an order by its idempotency key, before any expensive work.
+     * Look up an order by its idempotency key, before anything that can refuse.
      *
-     * The order route calls this FIRST, before the delivery check. A retry of a
-     * request that already succeeded is a customer refreshing the page or a
-     * network re-sending — neither is a new order, and neither should cost two
-     * Google calls or, worse, be refused because the address has drifted out of
-     * range since the order was placed. A customer's already-placed order is
-     * never invalidated by a later check of the same address.
+     * The order route calls this FIRST, before validation. A retry of a request
+     * that already succeeded is a customer refreshing the page or a network
+     * re-sending — neither is a new order, and neither should be refused because
+     * the customer has since corrected their address or the area list was edited.
+     * A customer's already-placed order is never invalidated after the fact.
      */
     async findByIdempotencyKey(idempotencyKey) {
       const { rows } = await run(
@@ -533,11 +530,8 @@ const toRow = (record) => ({
   address: record.address,
   landmark: record.landmark,
   special_instructions: record.specialInstructions,
-  delivery_distance_meters: record.delivery?.distanceMeters ?? null,
-  delivery_radius_km: record.delivery?.radiusKm ?? null,
-  delivery_eligible: record.delivery?.eligible ?? null,
-  delivery_outcome: record.delivery?.outcome ?? null,
-  delivery_checked_at: record.delivery?.checkedAt ?? null,
+  delivery_area: record.deliveryArea ?? null,
+  delivery_area_confirmed: record.deliveryAreaConfirmed ?? null,
   tracking_token: record.trackingToken ?? null,
   items: record.items,
   subtotal: record.subtotal,
@@ -901,24 +895,20 @@ const toCamel = (row) => ({
   landmark: row.landmark,
   specialInstructions: row.special_instructions,
   /**
-   * The verification the server performed before creating this order.
+   * The delivery area the customer selected, and their confirmation of the
+   * address. Two flat fields rather than a nested object: there is nothing to
+   * group now that no provider result is stored, and a null `deliveryArea` is the
+   * honest reading for an order placed before the area list existed.
    *
-   * Grouped and always present, so the UI never has to test five flat fields to
-   * learn whether an address was checked. `verified: false` with nulls is the
-   * honest reading for an order placed before the rule existed.
+   * `deliveryAreaName` is resolved from the CURRENT configured list at read time,
+   * so a customer and an admin always see the same label for the same id, and a
+   * renamed area shows its new name on historical orders. It is null when the id is
+   * no longer in the list, which is the signal to not silently rename an order's
+   * area into something it never was.
    */
-  delivery: {
-    verified: row.delivery_checked_at !== null && row.delivery_checked_at !== undefined,
-    outcome: row.delivery_outcome ?? null,
-    eligible: row.delivery_eligible ?? null,
-    distanceMeters: row.delivery_distance_meters ?? null,
-    radiusKm: row.delivery_radius_km === null || row.delivery_radius_km === undefined
-      ? null
-      : Number(row.delivery_radius_km),
-    checkedAt: row.delivery_checked_at
-      ? new Date(row.delivery_checked_at).toISOString()
-      : null,
-  },
+  deliveryArea: row.delivery_area ?? null,
+  deliveryAreaName: row.delivery_area ? deliveryAreaFor(row.delivery_area)?.name ?? null : null,
+  deliveryAreaConfirmed: row.delivery_area_confirmed === true,
   items: typeof row.items === "string" ? JSON.parse(row.items) : row.items,
   subtotal: row.subtotal,
   deliveryCharge: row.delivery_charge,

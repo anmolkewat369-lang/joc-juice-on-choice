@@ -32,76 +32,30 @@ import { orderSummaryText, whatsappLink } from "../api/_lib/notify.js";
 process.env.JOC_ALLOW_MEMORY_STORE = "true";
 delete process.env.DATABASE_URL;
 
-/* --------------------------- Google delivery stub -------------------------- */
+/* --------------------------- No provider to stub ---------------------------- */
 
 /**
- * Every order now requires a driving-distance check, so the whole suite needs a
- * maps provider. Rather than weaken the order route for tests, the provider
- * itself is stubbed: `fetch` below answers the two Google endpoints and delegates
- * everything else to the real implementation, so the order path exercises its
- * actual Google code — the request it builds, the fields it reads, the integer
- * metre comparison — with only the network replaced.
+ * There is no delivery provider any more.
  *
- * `maps` is mutable so a check can make the provider report a specific distance,
- * fail, or find nothing. Reset by `withMaps` around each such check, so no check
- * can silently depend on the previous one's answer.
+ * JOC publishes a list of areas and the customer picks one; nothing in the order
+ * path makes an outbound request. That is the strongest guarantee this file can
+ * offer, so it is asserted rather than assumed: `realFetch` is installed over
+ * `globalThis.fetch` and records every call. If any future code reintroduced a
+ * geocoding or routing call, order creation would fail loudly here instead of
+ * quietly depending on a third party again.
  */
-const maps = {
-  distanceMeters: 3200,
-  /** null to simulate the provider being unreachable or erroring. */
-  routeResponse: null,
-  /** "ZERO_RESULTS" makes the geocoder find nothing. */
-  geocodeStatus: "OK",
-  calls: [],
-};
-
-const googleJson = (body, status = 200) => ({
-  ok: status >= 200 && status < 300,
-  status,
-  json: async () => body,
-  text: async () => JSON.stringify(body),
-});
-
 const realFetch = globalThis.fetch;
+const outboundCalls = [];
 
 globalThis.fetch = async (input, init = {}) => {
-  const url = String(input?.url ?? input);
-  const isGeocode = url.includes("/maps/api/geocode/json");
-  const isRoute = url.includes("routes.googleapis.com");
-  if (!isGeocode && !isRoute) return realFetch(input, init);
-
-  maps.calls.push({ url, init });
-
-  if (isGeocode) {
-    if (maps.geocodeStatus !== "OK") return googleJson({ status: maps.geocodeStatus });
-    return googleJson({
-      status: "OK",
-      results: [
-        {
-          formatted_address: "Jabalpur, Madhya Pradesh",
-          geometry: { location: { lat: 23.18, lng: 79.99 } },
-        },
-      ],
-    });
-  }
-
-  if (maps.routeResponse) return googleJson(maps.routeResponse);
-  return googleJson({
-    routes: [
-      {
-        distanceMeters: maps.distanceMeters,
-        duration: "600s",
-        status: "OK",
-      },
-    ],
-  });
+  outboundCalls.push(String(input?.url ?? input));
+  return realFetch(input, init);
 };
 
-// A configured store, so the checks exercise the real path rather than the
-// "no coordinates configured" fail-closed branch.
-process.env.GOOGLE_MAPS_API_KEY = "test-google-key";
-process.env.JOC_STORE_LATITUDE = "23.1815";
-process.env.JOC_STORE_LONGITUDE = "79.9864";
+/** Forget recorded calls, so one check cannot depend on another's. */
+const forgetCalls = () => {
+  outboundCalls.length = 0;
+};
 
 const checks = [];
 const check = (name, fn) => checks.push([name, fn]);
@@ -700,12 +654,111 @@ check("payments/create still refuses a caller with no order token after the merg
   assert.equal(res.payload.gatewayOrderId, undefined, "no gateway order may be opened");
 });
 
+/* ------------------------- Delivery area + address ------------------------- */
+
+check("an order with no delivery area is refused", withUpiEnv(async () => {
+  const res = await placeOrder(checkoutBody("COD", { deliveryArea: null }), "guard-area-missing-1");
+  assert.equal(res.statusCode, 422, JSON.stringify(res.payload));
+  assert.equal(res.payload.error.code, "invalid_checkout");
+  assert.equal(
+    res.payload.error.errors.deliveryArea,
+    "Please select your area from the list.",
+    "a missing area names the fix",
+  );
+}));
+
+check("an area JOC does not serve is refused, not accepted on trust", withUpiEnv(async () => {
+  const res = await placeOrder(
+    checkoutBody("COD", { deliveryArea: "somewhere-else" }),
+    "guard-area-unknown-1",
+  );
+  assert.equal(res.statusCode, 422);
+  assert.match(res.payload.error.errors.deliveryArea, /not in JOC's delivery list/);
+}));
+
+check("an order without the address confirmation is refused", withUpiEnv(async () => {
+  const res = await placeOrder(
+    checkoutBody("COD", { deliveryAreaConfirmed: false }),
+    "guard-confirm-false-1",
+  );
+  assert.equal(res.statusCode, 422);
+  assert.equal(
+    res.payload.error.errors.deliveryAreaConfirmed,
+    "Please confirm that your delivery address is correct and within JOC's delivery area.",
+  );
+}));
+
+check("the confirmation must be a real boolean, not a truthy string", withUpiEnv(async () => {
+  // A hand-written request that posts "true" has not understood the contract.
+  // Accepting it would mean the box on the form and the field on the wire are not
+  // the same thing, and one of them can be bypassed.
+  for (const value of ["true", 1, "on", "yes", {}]) {
+    const res = await placeOrder(
+      checkoutBody("COD", { deliveryAreaConfirmed: value }),
+      `guard-confirm-junk-${typeof value}-${String(value).replace(/\W/g, "")}`,
+    );
+    assert.equal(res.statusCode, 422, `"${String(value)}" must not count as a confirmation`);
+    assert.ok(res.payload.error.errors.deliveryAreaConfirmed);
+  }
+}));
+
+check("the customer cannot supply their own area label", withUpiEnv(async () => {
+  const res = await placeOrder(
+    checkoutBody("COD", {
+      deliveryArea: "marhatal",
+      deliveryAreaName: "Nowhere Special",
+    }),
+    "guard-area-name-1",
+  );
+  assert.equal(res.statusCode, 201);
+  assert.equal(
+    res.payload.order.deliveryArea,
+    "marhatal",
+    "the id comes from the request and is checked against the list",
+  );
+  assert.equal(
+    res.payload.order.deliveryAreaName,
+    "Marhatal",
+    "the label is resolved from the configured list, never from the request",
+  );
+}));
+
+check("placing an order makes no outbound request", withUpiEnv(async () => {
+  // The guarantee this whole change rests on: creating an order must not depend on
+  // any third party. If a geocoding or routing call ever came back, this fails here
+  // rather than in production.
+  forgetCalls();
+  const res = await placeOrder(checkoutBody("COD"), "guard-no-egress-1");
+  assert.equal(res.statusCode, 201, JSON.stringify(res.payload));
+  assert.deepEqual(
+    outboundCalls,
+    [],
+    `order creation made an outbound call: ${outboundCalls.join(", ")}`,
+  );
+}));
+
+check("a new order waits for JOC to confirm delivery, as RECEIVED", withUpiEnv(async () => {
+  const res = await placeOrder(checkoutBody("COD"), "guard-received-1");
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.payload.order.orderStatus, "RECEIVED");
+  assert.equal(res.payload.order.deliveryAreaConfirmed, true);
+  // No measured distance anywhere in the response: nothing measures one.
+  const body = JSON.stringify(res.payload);
+  assert.equal(body.includes("distanceMeters"), false, "no distance may be returned");
+  assert.equal(body.includes("by road"), false, "no road-distance claim may be returned");
+}));
 /* ---------------------------- end-to-end order paths ----------------------- */
 
 const checkoutBody = (paymentMethod, over = {}) => ({
   name: "Asha Rao",
   phone: "9876543210",
-  address: "12 MG Road, Indiranagar",
+  // Every order now needs a configured area and the customer's confirmation of
+  // the address. These two fields are part of the baseline fixture rather than
+  // something each check adds, so a check that is not about delivery still
+  // exercises a valid submission.
+  deliveryArea: "marhatal",
+  deliveryAreaConfirmed: true,
+  address: "Plot 42, Dixit Colony, Marhatal, Jabalpur 482002",
   landmark: "Opposite Toit",
   instructions: "Less ice",
   // Priced from the real menu, not a fixture: 159 x 2 = 318, delivery 0.
@@ -737,11 +790,14 @@ check("a validation failure returns a per-field map the checkout can act on", wi
   assert.equal(res.statusCode, 422, JSON.stringify(res.payload));
   assert.equal(res.payload.error.code, "invalid_checkout");
   // Field errors and refusal context are different things and travel separately:
-  // the checkout highlights inputs from `errors` and would paste "OUT_OF_RANGE"
+  // the checkout highlights inputs from `errors` and would paste a machine code
   // onto an input if it were handed `details` instead.
   assert.ok(res.payload.error.errors, "the field map must be under `errors`");
   assert.equal(res.payload.error.errors.phone, "Please enter a valid 10-digit mobile number.");
   assert.ok(res.payload.error.errors.address, "every bad field is reported, not just the first");
+  // "OUT_OF_RANGE" is gone as a concept; the checkout would paste it onto an input
+  // if refusal context were handed to the field map.
+  assert.equal(res.payload.error.details, undefined, "no refusal context on a validation error");
   assert.equal(res.payload.error.details, undefined, "no refusal context on a validation error");
   assert.ok(res.payload.error.message, "and a human-readable headline alongside it");
 }));

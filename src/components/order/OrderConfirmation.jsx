@@ -28,7 +28,7 @@ import {
   PAYMENT_STATUS_LABELS,
   customerPaymentState,
 } from "../../../shared/ordering.js";
-import { formatDistanceKm } from "../../../shared/delivery.js";
+import { DELIVERY_AREA_PENDING_NOTE } from "../../../shared/delivery.js";
 import { getOrderDetail } from "../../lib/api";
 import { useOrderFlow, isBusy } from "../../lib/useOrderFlow";
 import UpiPaymentPanel from "./UpiPaymentPanel";
@@ -375,16 +375,24 @@ export default function OrderConfirmation({
             ) : null}
           </p>
           {/*
-           * The verified driving distance, recorded at order time. Shown only when
-           * a check actually happened — an order placed before the rule existed has
-           * no distance, and inventing "—" that reads like a failed check would be
-           * a small lie about the record.
+           * The area the customer chose and their own confirmation of the address.
+           *
+           * No distance is shown because none exists: nothing measured the address.
+           * The wording below says the confirmation is still pending, which is the
+           * honest state — the customer's acknowledgement is on the order, and JOC
+           * confirms the address before preparing it.
            */}
-          {order.delivery?.verified && order.delivery.distanceMeters != null ? (
+          {order.deliveryArea ? (
             <p className={styles.distance}>
               <MapPin size={14} aria-hidden="true" />
-              Verified {formatDistanceKm(order.delivery.distanceMeters)} from the store by road
+              {order.deliveryAreaName ?? order.deliveryArea}
+              {order.deliveryAreaConfirmed === true
+                ? " · address confirmed by you"
+                : " · confirmation pending"}
             </p>
+          ) : null}
+          {order.deliveryArea ? (
+            <p className={styles.instructions}>{DELIVERY_AREA_PENDING_NOTE}</p>
           ) : null}
           {order.specialInstructions ? (
             <p className={styles.instructions}>

@@ -22,7 +22,7 @@ import {
   PAYMENT_STATUS,
   PAYMENT_STATUS_LABELS,
 } from "../../shared/ordering.js";
-import { formatDistanceKm } from "../../shared/delivery.js";
+import { deliveryAreaStatusLabel } from "../../shared/delivery.js";
 import { actOnOrder, getOrder, listOrders } from "./api.js";
 import NewOrderAlert from "./NewOrderAlert.jsx";
 import { formatPrice, formatDateTime } from "./format.js";
@@ -614,27 +614,33 @@ function OrderDrawer({ detail, onClose, onAction }) {
         </section>
 
         {/*
-          The road distance the SERVER measured, not the one the customer was
-          shown at checkout. An admin preparing a run needs the figure that decided
-          the order was allowed, and needs to know when it is missing rather than
-          seeing a blank field. Orders placed before the rule existed land here.
+          What the customer agreed to, and what JOC still has to decide.
+
+          This section is what the Confirm action is read against. There is no
+          measured distance here any more, because nothing measures one — the admin
+          sees the area the customer picked and their own confirmation, and judges
+          the exact address themselves. An order with no area predates the list, and
+          says so rather than being shown an empty field.
         */}
         <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>Delivery check</h3>
-          {order.delivery?.verified ? (
-            <p>
-              <MapPin size={15} aria-hidden="true" /> {formatDistanceKm(order.delivery.distanceMeters)}{" "}
-              by road
-              {order.delivery.eligible === false ? " · outside the area" : ""}
-            </p>
+          <h3 className={styles.sectionTitle}>Delivery area</h3>
+          {order.deliveryArea ? (
+            <>
+              <p>
+                <MapPin size={15} aria-hidden="true" />{" "}
+                {order.deliveryAreaName ?? order.deliveryArea}
+              </p>
+              <p className={styles.subtle}>
+                {deliveryAreaStatusLabel(order)} — confirm the address below before preparing
+                this order.
+              </p>
+            </>
           ) : (
             <p className={styles.subtle}>
-              Not verified — this order was placed before the delivery-area check existed.
+              No area recorded — this order was placed before JOC published a delivery-area list.
+              Confirm the delivery address manually.
             </p>
           )}
-          {order.delivery?.checkedAt ? (
-            <p className={styles.subtle}>Checked {formatDateTime(order.delivery.checkedAt)}</p>
-          ) : null}
         </section>
 
         <section className={styles.section}>

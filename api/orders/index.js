@@ -12,31 +12,27 @@
  *
  * THE ORDER OF OPERATIONS IS THE POINT
  *
- *   1. replay check   — has this idempotency key already created an order?
- *   2. validate       — shared contract, server-prices the menu
- *   3. verify delivery — Google geocode + driving distance, fail closed
- *   4. persist        — only now does an order, an ID, or a payment view exist
+ *   1. replay check — has this idempotency key already created an order?
+ *   2. validate     — shared contract: area, address, confirmation, server-priced
+ *   3. persist      — only now does an order, an ID, or a payment view exist
  *
- * Steps 1 and 3 are the two ends of this handler's whole character. Step 1 means
- * a retry never pays twice for a check it has already had, and — more important —
- * that a customer's already-placed order is never retracted because their address
- * has since drifted out of range. Step 3 means the delivery rule is enforced here,
- * by us, from the address in this request, and not by anything the client was
- * previously told. /api/delivery/check is a preview for the customer's benefit and
- * carries no authority whatsoever.
+ * Step 1 is what stops a retry from becoming a second order, and — more important —
+ * stops a customer's already-placed order from being retracted because their address
+ * has since drifted out of range. Step 2 is where the delivery rules live: the
+ * customer's chosen area is checked against the configured list and their explicit
+ * confirmation is required. Nothing is measured, located or geocoded here.
+ *
+ * There is no longer an outbound provider call in this handler. A placed order
+ * arrives as RECEIVED and waits for JOC to confirm delivery availability, which is
+ * what the admin Confirm action does.
  */
 
 import { ApiError, methodGuard, readJson, sendError, sendJson, clientKey } from "../_lib/http.js";
 import { getStore, toPublicOrder } from "../_lib/store.js";
-import {
-  readIdempotencyKey,
-  buildOrderRecord,
-  withDeliveryVerification,
-} from "../_lib/orderRequest.js";
+import { readIdempotencyKey, buildOrderRecord } from "../_lib/orderRequest.js";
 import { rateLimit, sweepRateLimits } from "../_lib/rateLimit.js";
 import { paymentViewFor } from "../_lib/payments.js";
 import { orderCreatedEvent, recordEventQuietly } from "../_lib/orderEvents.js";
-import { checkDelivery } from "../_lib/delivery.js";
 import { notifyNewOrder, notifyOrderReceived } from "../_lib/notify.js";
 
 export default async function handler(req, res) {
@@ -58,14 +54,14 @@ export default async function handler(req, res) {
     const idempotencyKey = readIdempotencyKey(req);
     const store = await getStore();
 
-    // (1) REPLAY FIRST, before anything expensive or anything that can refuse.
+    // (1) REPLAY FIRST, before anything that can refuse the request.
     //
-    // Reading this before the delivery check is the difference between "your order
-    // is safe" and "your order evaporated". A customer whose network dropped the
-    // response retries with the same key; if we re-verified their address first
-    // and the answer came back OUT_OF_RANGE — or the provider was briefly down —
-    // we would tell a customer with a real, already-accepted order that we could
-    // not take it. Their order exists. We return it.
+    // Reading this first is the difference between "your order is safe" and "your
+    // order evaporated". A customer whose network dropped the response retries with
+    // the same key; if we re-validated their address first and something had since
+    // changed — they corrected a typo, or the area list was edited — we would tell a
+    // customer with a real, already-accepted order that we could not take it. Their
+    // order exists. We return it.
     const replay = await store.findByIdempotencyKey(idempotencyKey);
     if (replay) {
       return sendJson(res, 200, {
@@ -81,21 +77,15 @@ export default async function handler(req, res) {
     }
 
     // (2) Validate and price from the trusted menu.
+    //
+    // This is where the delivery rules are enforced. The area is checked against
+    // the configured list and the explicit confirmation is required, so a payload
+    // that skips either never reaches persistence. Everything the record carries
+    // about delivery comes from here, already checked.
     const record = buildOrderRecord(body);
 
-    // (3) Verify the delivery address ourselves, and fail closed.
-    const checked = await checkDelivery({
-      address: record.address,
-      landmark: record.landmark,
-    });
-    if (!checked.eligible) {
-      throw deliveryRefusal(checked);
-    }
-
-    const verified = withDeliveryVerification(record, checked);
-
-    // (4) Persist. The first thing that exists as a consequence of this request.
-    const { order, created } = await store.createOrder(verified, idempotencyKey);
+    // (3) Persist. The first thing that exists as a consequence of this request.
+    const { order, created } = await store.createOrder(record, idempotencyKey);
 
     if (created) {
       // A new order is the one thing worth interrupting an admin for. The audit
@@ -119,38 +109,20 @@ export default async function handler(req, res) {
       payment: paymentViewFor(order),
       created,
       accessToken: created ? record.accessToken : null,
+      // Echoes what was accepted, and nothing more. No distance is known and no
+      // availability is claimed: the area was the customer's choice and the
+      // confirmation was their statement. JOC confirms the address before
+      // preparing the order.
       delivery: {
-        outcome: checked.outcome,
-        eligible: true,
-        distanceMeters: checked.distanceMeters,
-        radiusKm: checked.radiusKm,
-        radiusMeters: checked.radiusMeters,
-        message: checked.message,
+        area: record.deliveryArea,
+        areaName: record.deliveryAreaName,
+        areaConfirmed: record.deliveryAreaConfirmed,
       },
       storage: storageInfo(store),
     });
   } catch (error) {
     return sendError(res, error);
   }
-}
-
-/**
- * Turn a refusal into a 422 the checkout can act on.
- *
- * 422, not 500: the request was understood and the answer is a considered no.
- * A 5xx would tell the customer (and any monitoring) that JOC had a fault, and
- * the retry button our own error copy would suggest is exactly the wrong advice
- * for "we do not deliver that far".
- */
-function deliveryRefusal(checked) {
-  // The customer sees the shared contract's sentence for this outcome and nothing
-  // else. `reason` and `configError` stay server-side.
-  return new ApiError(422, checked.message, "delivery_unavailable", {
-    outcome: checked.outcome,
-    distanceMeters: checked.distanceMeters,
-    radiusKm: checked.radiusKm,
-    radiusMeters: checked.radiusMeters,
-  });
 }
 
 const storageInfo = (store) => ({

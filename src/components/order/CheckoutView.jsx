@@ -12,10 +12,14 @@ import {
   PAYMENT_PROVIDER,
   validateCheckout,
 } from "../../../shared/ordering.js";
+import {
+  DELIVERY_AREA_CONFIRM_LABEL,
+  DELIVERY_AREA_NOTE,
+} from "../../../shared/delivery.js";
 import { cartHref, homeHref } from "../../lib/route";
 import { useOrderFlow, isBusy, FLOW } from "../../lib/useOrderFlow";
 import Field from "./Field";
-import DeliveryCheck from "./DeliveryCheck";
+import AreaSelector from "./AreaSelector";
 import PaymentChoice from "./PaymentChoice";
 import styles from "./CheckoutView.module.css";
 
@@ -27,6 +31,11 @@ const EMPTY_FORM = {
   landmark: "",
   instructions: "",
   paymentMethod: "",
+  // The area is an id from the configured list, and `deliveryAreaConfirmed` is a
+  // real boolean rather than the string "on" — the server compares it to `true`
+  // exactly, and a string reaching that field would be refused.
+  deliveryArea: null,
+  deliveryAreaConfirmed: false,
 };
 
 const BUTTON_COPY = {
@@ -38,9 +47,11 @@ const BUTTON_COPY = {
 /**
  * Guest checkout — no account, no registration.
  *
- * Collected: name, mobile, address, and optionally a landmark, a note and an email
- * address. The same `validateCheckout` used by the server runs here for inline
- * messages, and the server still re-validates everything it receives.
+ * Collected: name, mobile, delivery area, exact address, and optionally a landmark,
+ * a note and an email address — plus a required confirmation that the address is
+ * correct and inside JOC's area. The same `validateCheckout` used by the server runs
+ * here for inline messages, and the server still re-validates everything it
+ * receives, including that the chosen area is one JOC actually serves.
  */
 export default function CheckoutView({ onPlaced, onReturnHome }) {
   const { lines, subtotal, deliveryCharge, total, isEmpty } = useCart();
@@ -96,10 +107,13 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
     const result = validateCheckout({ ...form, items });
     setErrors(result.errors);
     if (!result.valid) {
-      // Move focus to the first thing that needs fixing.
+      // Move focus to the first thing that needs fixing. Two fields do not carry
+      // their own id — the payment choice and the area picker — so each maps to the
+      // element that actually holds focus. Without this, focusing "deliveryArea"
+      // would silently do nothing and the customer would have to hunt for it.
+      const FOCUS_TARGET = { paymentMethod: "payment-cod", deliveryArea: "area-selector-search" };
       const firstKey = Object.keys(result.errors)[0];
-      const target =
-        firstKey === "paymentMethod" ? "payment-cod" : firstKey;
+      const target = FOCUS_TARGET[firstKey] ?? firstKey;
       document.getElementById(target)?.focus();
       return;
     }
@@ -190,7 +204,31 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
 
             <fieldset className={styles.block} disabled={busy}>
               <legend className={styles.blockTitle}>Delivery details</legend>
+              <p className={styles.areaNote}>{DELIVERY_AREA_NOTE}</p>
               <div className={styles.grid}>
+                {/*
+                 * The area comes first: it is what tells the customer JOC reaches
+                 * them at all, so asking for the full address before showing the
+                 * list would have them type an address into a form that may not
+                 * apply to them.
+                 */}
+                <div className={styles.full}>
+                  <AreaSelector
+                    value={form.deliveryArea}
+                    onChange={(deliveryArea) => {
+                      setForm((current) => ({ ...current, deliveryArea }));
+                      // Re-validate so the error clears as soon as it is fixed,
+                      // rather than lingering until the next submit.
+                      if (submitted) {
+                        setErrors(
+                          validateCheckout({ ...form, deliveryArea, items }).errors,
+                        );
+                      }
+                    }}
+                    disabled={busy}
+                    error={errors.deliveryArea}
+                  />
+                </div>
                 <div className={styles.full}>
                   <Field
                     id="address"
@@ -226,13 +264,46 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
                     placeholder="Less spicy, no onion, call on arrival…"
                   />
                 </div>
-                <div className={styles.full}>
-                  {/*
-                   * A preview only. The order route re-runs the same check against
-                   * this address before anything is created, so this component can
-                   * never be the reason an out-of-range order is accepted.
-                   */}
-                  <DeliveryCheck address={form.address} landmark={form.landmark} disabled={busy} />
+
+                {/*
+                 * The required acknowledgement.
+                 *
+                 * A checkbox is used because this is an explicit statement of
+                 * something only the customer can know, and a tick they can see and
+                 * un-tick is honest about that. It is not a substitute for the
+                 * server check — validateCheckout requires `deliveryAreaConfirmed`
+                 * to be exactly true on the request itself, so clearing this box and
+                 * posting anyway is refused rather than silently treated as agreed.
+                 */}
+                <div className={`${styles.full} ${styles.confirm}`}>
+                  <label className={styles.confirmLabel} htmlFor="deliveryAreaConfirmed">
+                    <input
+                      id="deliveryAreaConfirmed"
+                      type="checkbox"
+                      className={styles.confirmInput}
+                      checked={form.deliveryAreaConfirmed}
+                      disabled={busy}
+                      aria-invalid={Boolean(errors.deliveryAreaConfirmed) || undefined}
+                      aria-describedby={
+                        errors.deliveryAreaConfirmed ? "deliveryAreaConfirmed-error" : undefined
+                      }
+                      onChange={(event) => {
+                        const deliveryAreaConfirmed = event.target.checked;
+                        setForm((current) => ({ ...current, deliveryAreaConfirmed }));
+                        if (submitted) {
+                          setErrors(
+                            validateCheckout({ ...form, deliveryAreaConfirmed, items }).errors,
+                          );
+                        }
+                      }}
+                    />
+                    <span>{DELIVERY_AREA_CONFIRM_LABEL}</span>
+                  </label>
+                  {errors.deliveryAreaConfirmed ? (
+                    <p id="deliveryAreaConfirmed-error" className={styles.confirmError} role="alert">
+                      {errors.deliveryAreaConfirmed}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </fieldset>

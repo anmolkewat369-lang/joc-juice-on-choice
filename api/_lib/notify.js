@@ -36,7 +36,7 @@ import {
   PAYMENT_STATUS,
   PAYMENT_STATUS_LABELS,
 } from "../../shared/ordering.js";
-import { formatDistanceKm } from "../../shared/delivery.js";
+import { DELIVERY_AREA_PENDING_LABEL, deliveryAreaSummary } from "../../shared/delivery.js";
 
 import {
   NOTIFICATION_LEASE_SECONDS,
@@ -90,11 +90,13 @@ export function orderSummaryText(order) {
     `Payment: ${order.paymentMethod} (${order.paymentStatus})`,
     `Status: ${order.orderStatus}`,
   ];
-  if (order.paymentReference) lines.push(`UTR: ${order.paymentReference}`);
+if (order.paymentReference) lines.push(`UTR: ${order.paymentReference}`);
   if (order.landmark) lines.push(`Landmark: ${order.landmark}`);
-  if (order.delivery?.distanceMeters != null) {
-    lines.push(`Delivery: verified ${formatDistanceKm(order.delivery.distanceMeters)} by road`);
-  }
+  // Always present, including when there is no area. An order the admin cannot see
+  // a delivery area for is exactly the one where they most need to be told to check
+  // the address themselves, so the line is omitted-never rather than
+  // omitted-quietly.
+  lines.push(`Delivery: ${deliveryLine(order)}`);
   return lines.join("\n");
 }
 
@@ -156,11 +158,22 @@ const paymentLabel = (value) => PAYMENT_STATUS_LABELS[value] ?? String(value ?? 
 const methodLabel = (value) => PAYMENT_METHOD_LABELS[value] ?? String(value ?? "—");
 const providerLabel = (value) => PAYMENT_PROVIDER_LABELS[value] ?? (value ?? "—");
 
-/** The delivery line, honest about an address that was never verified. */
+/**
+ * The delivery line, honest about what is and is not known.
+ *
+ * An order carries the area the customer chose and their confirmation of the
+ * address. It does NOT carry a verified distance, because nothing measured one —
+ * so this line must never imply that JOC has confirmed the address is deliverable.
+ * `deliveryAreaSummary` gives the area and the confirmation state; the pending
+ * label is appended when the confirmation is absent, which is what an order placed
+ * before the area list looks like.
+ */
 function deliveryLine(order) {
-  const delivery = order.delivery ?? {};
-  if (!delivery.verified || delivery.distanceMeters == null) return "Not verified";
-  return `${formatDistanceKm(delivery.distanceMeters)} by road (limit ${delivery.radiusKm} km)`;
+  if (!order.deliveryArea) return "No area recorded — confirm the address before preparing";
+  const summary = deliveryAreaSummary(order);
+  return order.deliveryAreaConfirmed === true
+    ? summary
+    : `${summary} · ${DELIVERY_AREA_PENDING_LABEL}`;
 }
 
 /** The money block, identical in admin and customer mail. Server-priced only. */
@@ -207,8 +220,8 @@ function adminNewOrderContent(order) {
     `Email: ${order.customerEmail ?? "not provided"}`,
     `Address: ${order.address}`,
     order.landmark ? `Landmark: ${order.landmark}` : null,
-    order.specialInstructions ? `Special instructions: ${order.specialInstructions}` : null,
-    `Delivery check: ${deliveryLine(order)}`,
+order.specialInstructions ? `Special instructions: ${order.specialInstructions}` : null,
+    `Delivery area: ${deliveryLine(order)}`,
     "",
     "Items:",
     itemLines(order),
@@ -233,8 +246,8 @@ function adminNewOrderContent(order) {
       row("Email", order.customerEmail ?? "not provided"),
       row("Address", order.address),
       row("Landmark", order.landmark),
-      row("Special instructions", order.specialInstructions),
-      row("Delivery check", deliveryLine(order)),
+row("Special instructions", order.specialInstructions),
+      row("Delivery area", deliveryLine(order)),
     ].join("")}</table>
     <h3 style="margin:16px 0 8px">Items</h3>
     <ul style="margin:0;padding-left:20px">${(order.items ?? [])
@@ -290,7 +303,10 @@ function customerOrderReceivedContent(order, link) {
     "",
     `Track your order: ${link ?? "(use the link on the JOC site)"}`,
     "",
+`Delivery area: ${order.deliveryAreaName ?? order.deliveryArea ?? "not recorded"}`,
     `Delivery address: ${order.address}${order.landmark ? ` (near ${order.landmark})` : ""}`,
+    "",
+    "JOC will confirm delivery availability before preparing your order.",
     "",
     "Thank you for ordering from JOC.",
   ]

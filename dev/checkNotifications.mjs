@@ -99,12 +99,16 @@ const withMailEnv = (over, fn) => async () => {
 const checks = [];
 const check = (name, fn) => checks.push([name, fn]);
 
-const ADDRESS = "Civil Lines, Jabalpur";
+const ADDRESS = "Plot 42, Civil Lines, Jabalpur 482001";
 
 const baseRecord = (over = {}) => ({
   customerName: "Asha Rao",
   phone: "9876543210",
   customerEmail: "asha@example.com",
+  // The area the customer chose and their confirmation of the address. No
+  // distance: nothing measures one, so there is nothing to store or report.
+  deliveryArea: "civil-lines",
+  deliveryAreaConfirmed: true,
   address: ADDRESS,
   landmark: "Near the petrol pump",
   specialInstructions: "Less ice",
@@ -117,14 +121,6 @@ const baseRecord = (over = {}) => ({
   paymentStatus: PAYMENT_STATUS.PENDING,
   orderStatus: ORDER_STATUS.RECEIVED,
   paymentProvider: "manual_upi",
-  delivery: {
-    verified: true,
-    outcome: "AVAILABLE",
-    eligible: true,
-    distanceMeters: 4200,
-    radiusKm: 4,
-    checkedAt: new Date().toISOString(),
-  },
   ...over,
 });
 
@@ -146,16 +142,28 @@ const statuses = (rows) => rows.map((row) => row.status).sort();
 
 /* ---------------------------------- content -------------------------------- */
 
-check("the admin summary reports the verified road distance", async () => {
+check("the admin summary reports the chosen area and the confirmation", async () => {
   const { row } = await createOrder({}, "content-summary-1");
   const text = orderSummaryText(toAdminOrder(row));
-  assert.match(text, /4\.2 km by road/, "the admin plans a run from this figure");
+  // The area is shown by its label, not its slug: this message is read on a phone
+  // by whoever is doing the delivery run, not by a developer with the source open.
+  assert.match(text, /Civil Lines/, "the admin plans a run from this area");
+  assert.match(text, /address confirmed/, "and knows the customer confirmed the address");
   assert.match(text, /JOC-/, "the order id must be in the message");
+  // The old summary told the admin a measured road distance. Nothing measures one
+  // now, so a figure appearing here would mean a claim JOC cannot support.
+  assert.doesNotMatch(text, /by road/, "no road-distance claim may appear");
+  assert.doesNotMatch(text, /\d+(\.\d+)? km/, "no distance figure may appear");
 });
 
-check("an order placed before the delivery rule says so, rather than guessing", async () => {
-  const { row } = await createOrder({ delivery: null }, "content-unverified-1");
-  assert.equal(orderSummaryText(toAdminOrder(row)).includes("verified"), false);
+check("an order placed before the area list says so, rather than guessing", async () => {
+  const { row } = await createOrder(
+    { deliveryArea: null, deliveryAreaConfirmed: false },
+    "content-unverified-1",
+  );
+  const text = orderSummaryText(toAdminOrder(row));
+  assert.equal(text.includes("civil-lines"), false, "no area may be invented for it");
+  assert.match(text, /No area recorded/, "the admin is told to confirm the address");
   assert.equal(whatsappLink(toAdminOrder(row)), null, "no WhatsApp number is configured here");
 });
 

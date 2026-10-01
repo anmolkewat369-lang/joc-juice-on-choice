@@ -1,146 +1,174 @@
 /**
  * Shared delivery contract.
  *
- * JOC delivers only within a fixed DRIVING (road) distance of the store. That is
- * not a straight-line radius, so nothing in this file or in the API may be used
- * as the delivery decision by measuring latitude/longitude directly. The decision
- * is always the road distance returned by the Google Routes API
- * (api/_lib/googleMaps.js), compared here against a radius in metres.
+ * JOC decides what it delivers to by PUBLISHING A LIST OF AREAS, and the customer
+ * picks one from it. There is no coordinate, no radius and no measured distance
+ * anywhere in this file or in the API — the address a customer types is never
+ * compared to a pin. The delivery question is answered by two facts instead:
+ *
+ *   1. the customer chose an area from the configured list (src/data/deliveryAreas.js)
+ *   2. the customer explicitly confirmed the address they typed is correct and
+ *      inside JOC's delivery area
+ *
+ * Both are enforced server-side by validateCheckout in shared/ordering.js. The
+ * first is checked against the list rather than trusted, so a tampered request
+ * cannot claim an area JOC does not serve. The second is stored on the order as an
+ * audited fact, not as a convenience flag.
+ *
+ * WHAT THIS FILE DELIBERATELY DOES NOT DO
+ *   It cannot tell you whether an address is really inside an area. Nothing in
+ *   this codebase can. That judgement is JOC's, made by the person who confirms
+ *   the order, which is why an order lands as RECEIVED and waits for an admin.
  *
  * Imported by BOTH the React frontend and the Vercel serverless functions, so the
  * wording a customer reads and the wording the server enforces are the same
- * strings, and so both agree on how a distance is displayed and rounded.
- *
- * There is deliberately no great-circle / Haversine helper here. A distance
- * computed from two coordinates is a lower bound, not the road distance, and
- * shipping one next to the real rule is how a straight-line radius silently
- * becomes the delivery rule.
+ * strings.
  */
 
-/** Used when JOC_DELIVERY_RADIUS_KM is unset. The current JOC business rule. */
-export const DELIVERY_RADIUS_FALLBACK_KM = 4;
+import {
+  DELIVERY_AREAS,
+  deliveryAreaFor,
+  isDeliveryArea,
+  normaliseAreaId,
+  searchDeliveryAreas,
+} from "../src/data/deliveryAreas.js";
 
-/** Guard rails on the configured radius, so a typo cannot open or close the area. */
-export const DELIVERY_RADIUS_MIN_KM = 0.5;
-export const DELIVERY_RADIUS_MAX_KM = 50;
-
-/**
- * The measured outcomes of a delivery check.
- *
- * OUT_OF_RANGE is a determinate answer and is *not* an error. CHECK_UNAVAILABLE
- * and NOT_CONFIGURED mean the answer is unknown, and an unknown answer is never
- * treated as "inside the area" — that would make the restriction bypassable by
- * simply making the provider unreachable.
- */
-export const DELIVERY_OUTCOME = {
-  AVAILABLE: "AVAILABLE",
-  OUT_OF_RANGE: "OUT_OF_RANGE",
-  ADDRESS_NOT_FOUND: "ADDRESS_NOT_FOUND",
-  ADDRESS_AMBIGUOUS: "ADDRESS_AMBIGUOUS",
-  CHECK_UNAVAILABLE: "CHECK_UNAVAILABLE",
-  NOT_CONFIGURED: "NOT_CONFIGURED",
+export {
+  DELIVERY_AREAS,
+  deliveryAreaFor,
+  isDeliveryArea,
+  normaliseAreaId,
+  searchDeliveryAreas,
 };
 
-/** Outcomes that permit an order to exist. Everything else blocks it. */
-export const DELIVERABLE_OUTCOMES = new Set([DELIVERY_OUTCOME.AVAILABLE]);
+/* ------------------------------- The wording ------------------------------- */
 
 /**
- * The exact customer-facing sentences.
+ * The customer-facing sentences, as shared constants rather than inline JSX.
  *
- * `km` is already formatted by the caller, so the frontend and the server cannot
- * render the same number two different ways. Only `outOfRange` needs the radius —
- * inside the area, the rule is redundant with the distance the
- * customer was just shown.
+ * These strings are shown on the checkout, returned by the server when it refuses
+ * a request, and echoed in the confirmation screen. Writing them once means the
+ * sentence the customer agreed to is the sentence the server enforces.
  */
-export const DELIVERY_MESSAGES = {
-  available: (km) =>
-    `Delivery available. Your address is about ${km} from JOC by road.`,
-  outOfRange: (km, radiusKm) =>
-    `Delivery unavailable. Your address is about ${km} from JOC by road. ` +
-    `JOC currently delivers only within ${radiusKm} km of the store.`,
-  addressNotFound:
-    "We couldn't locate this address. Please enter a more complete address or add a nearby landmark.",
-  addressAmbiguous:
-    "We couldn't accurately locate this address. Please enter a more complete address or add a nearby landmark.",
-  checkUnavailable:
-    "We couldn't verify delivery availability right now. Please try again in a moment.",
-  notConfigured:
-    "We couldn't verify delivery availability right now. Please try again in a moment.",
-};
 
-/** One line above the address fields, so the rule is stated before it is tested. */
-export const DELIVERY_RULE_NOTE = (radiusKm = DELIVERY_RADIUS_FALLBACK_KM) =>
-  `JOC currently delivers within ${radiusKm} km driving distance of the store. We check the actual road distance to your address before you order.`;
-
-/** The delivery-area rule as the admin sees it on an order. */
-export const DELIVERY_RULE_LABEL = (radiusKm) => `Within ${radiusKm} km by road`;
-
-/* ------------------------------- The rule -------------------------------- */
+/** Stated above the address fields, before the customer has chosen an area. */
+export const DELIVERY_AREA_NOTE =
+  "JOC currently delivers within approximately 4 km by road. " +
+  "Please select your area and enter your complete delivery address. " +
+  "JOC will confirm delivery availability before preparing your order.";
 
 /**
- * The configured radius, clamped to a sane range.
- *
- * Values arrive from an environment variable that an operator types by hand, so
- * "4 km", "4km" and " 4 " all have to work and "0" or "-3" must not silently
- * become a rule that rejects every order or a rule that accepts everywhere.
+ * The required acknowledgement, verbatim in the UI, the server error and the
+ * test that pins it.
  */
-export function normaliseDeliveryRadiusKm(raw) {
-  const value = Number.parseFloat(String(raw ?? "").trim());
-  if (!Number.isFinite(value)) return DELIVERY_RADIUS_FALLBACK_KM;
-  if (value < DELIVERY_RADIUS_MIN_KM) return DELIVERY_RADIUS_MIN_KM;
-  if (value > DELIVERY_RADIUS_MAX_KM) return DELIVERY_RADIUS_MAX_KM;
-  return value;
+export const DELIVERY_AREA_CONFIRM_LABEL =
+  "I confirm that the delivery address entered above is correct and is within JOC's delivery area.";
+
+/** Shown when the customer tries to continue without ticking the box. */
+export const DELIVERY_AREA_CONFIRM_REQUIRED =
+  "Please confirm that your delivery address is correct and within JOC's delivery area.";
+
+/** Shown when nothing has been chosen yet. */
+export const DELIVERY_AREA_REQUIRED = "Please select your area from the list.";
+
+/**
+ * Shown when the submitted area is not one JOC serves.
+ *
+ * Deliberately does not name the areas JOC does not serve, and does not say
+ * "that area is too far" — a customer outside the area is still a customer, and
+ * this message is about correcting the selection, not refusing the order.
+ */
+export const DELIVERY_AREA_UNSUPPORTED =
+  "That area is not in JOC's delivery list. Please choose an area from the list, or contact JOC.";
+
+/** Label for the picker itself. */
+export const DELIVERY_AREA_LABEL = "Delivery area";
+
+/** Hint under the picker. */
+export const DELIVERY_AREA_HINT = "Search and select the area you live in.";
+
+/** What the customer sees once they have chosen, on the order summary. */
+export const DELIVERY_AREA_SELECTED = (name) => `Area: ${name}`;
+
+/**
+ * The pending state, in one place.
+ *
+ * JOC has NOT verified that an address is deliverable when the customer orders.
+ * It knows the customer picked an area and confirmed their address. Saying
+ * anything stronger on the confirmation screen would be a claim nobody has made.
+ */
+export const DELIVERY_AREA_PENDING_LABEL = "Delivery confirmation pending";
+
+export const DELIVERY_AREA_PENDING_NOTE =
+  "We have your area and address. JOC will confirm delivery availability before preparing your order.";
+
+/* ------------------------------ The rule ----------------------------------- */
+
+/**
+ * Validate the delivery area and the acknowledgement together.
+ *
+ * Returns the same `{ errors, valid, value }` shape as validateCheckout so the
+ * checkout form, the server and the tests all read the same way. `area` is the
+ * NORMALISED id and `areaName` is the label from the list — the label is resolved
+ * here, from the configured data, so it can never be a client-supplied string that
+ * reaches the admin dashboard or an email.
+ *
+ * The confirmation is compared to `true` exactly. `"true"`, `1` and `{}` are all
+ * refusals: a string or number reaching this field means something is writing
+ * orders from a source that does not understand the contract, and it does not get
+ * to decide that the customer agreed to something.
+ */
+export function validateDeliveryArea(input) {
+  const errors = {};
+
+  const submitted = normaliseAreaId(input?.deliveryArea);
+  const area = deliveryAreaFor(submitted);
+
+  if (!submitted) {
+    errors.deliveryArea = DELIVERY_AREA_REQUIRED;
+  } else if (!area) {
+    errors.deliveryArea = DELIVERY_AREA_UNSUPPORTED;
+  }
+
+  if (input?.deliveryAreaConfirmed !== true) {
+    errors.deliveryAreaConfirmed = DELIVERY_AREA_CONFIRM_REQUIRED;
+  }
+
+  const valid = Object.keys(errors).length === 0;
+  return {
+    errors,
+    valid,
+    value: valid ? { area: area.id, areaName: area.name, confirmed: true } : null,
+  };
 }
 
 /**
- * The radius in METRES — the unit the whole comparison happens in.
+ * How the admin dashboard labels the delivery area on an order.
  *
- * Metres rather than kilometres because the Routes API returns metres, and
- * converting twice (metres -> km -> metres) is how a 4000 m boundary ends up
- * being compared as 4999.9997 and rejects a customer standing exactly on it.
+ * An order with no area predates the list (it was placed under the old road-distance
+ * rule) and says so plainly. `pending` is a genuine state, not an error: the order
+ * has arrived and is waiting for JOC to confirm the address is deliverable.
  */
-export const radiusMeters = (radiusKm) =>
-  Math.round(normaliseDeliveryRadiusKm(radiusKm) * 1000);
-
-/**
- * The single delivery decision.
- *
- * `distanceMeters` is the road distance. `<=` is inclusive on purpose: an
- * address exactly at the limit is deliverable.
- *
- * Anything that is not a real measurement is refused. `Number(null)`,
- * `Number("")` and `Number([])` are all `0`, which would quietly make a missing
- * distance the *closest possible* address and approve the order — so the
- * emptiness is rejected before any arithmetic happens. "Unknown" must never read
- * as "close enough".
- */
-export function isWithinDeliveryRadius(distanceMeters, radiusKm) {
-  if (distanceMeters === null || distanceMeters === undefined || distanceMeters === "") return false;
-  const meters = Math.round(Number(distanceMeters));
-  if (!Number.isFinite(meters) || meters < 0) return false;
-  return meters <= radiusMeters(radiusKm);
+export function deliveryAreaStatusLabel(order) {
+  if (!order?.deliveryArea) return "Not recorded";
+  return order.deliveryAreaConfirmed === true
+    ? "Confirmed by customer"
+    : DELIVERY_AREA_PENDING_LABEL;
 }
 
-/* ----------------------------- Presentation ------------------------------ */
-
 /**
- * One decimal place, which is the precision a customer can act on.
+ * The one-line delivery area as an admin reads it on a list row.
  *
- * An absent distance renders as a dash and never as `0.0 km`: a missing
- * measurement and a measurement of zero are completely different facts, and
- * showing the second one would be a lie about the delivery.
+ * Area + confirmation only. It never states a distance, because none is known.
+ *
+ * The label comes from the configured list when the area is still in it. If the area
+ * has since been renamed or removed, the stored id is shown instead: an admin needs
+ * to recognise that an id far more than they need a pretty name, and silently
+ * dropping the area would hide the one order most likely to need a human decision.
  */
-export function formatDistanceKm(distanceMeters) {
-  if (distanceMeters === null || distanceMeters === undefined || distanceMeters === "") return "—";
-  const meters = Number(distanceMeters);
-  if (!Number.isFinite(meters) || meters < 0) return "—";
-  return `${(meters / 1000).toFixed(1)} km`;
-}
-
-/** How the admin dashboard labels a stored, already-verified distance. */
-export function deliveryStatusLabel(order) {
-  const delivery = order?.delivery ?? {};
-  if (delivery.distanceMeters == null) return "Not verified";
-  if (delivery.eligible === false) return "Outside delivery area";
-  return "Eligible";
+export function deliveryAreaSummary(order) {
+  const area = order?.deliveryArea;
+  if (!area) return "No area recorded";
+  const confirmation = order?.deliveryAreaConfirmed === true ? "address confirmed" : "confirmation pending";
+  return `${deliveryAreaFor(area)?.name ?? area} · ${confirmation}`;
 }

@@ -2,8 +2,9 @@
  * Runtime DDL, executed at most once per cold start.
  *
  * Mirrors `db/schema.sql` plus `db/migrations/002_payment_provider_and_admin.sql`,
- * `db/migrations/003_cod_payment_provider.sql` and
- * `db/migrations/004_delivery_and_notifications.sql` — those files stay the
+ * `db/migrations/003_cod_payment_provider.sql`,
+ * `db/migrations/004_delivery_and_notifications.sql` and
+ * `db/migrations/005_delivery_area_confirmation.sql` — those files stay the
  * reference for running migrations by hand in the Supabase SQL editor. This
  * copy exists so the API can self-provision on first request during local
  * development and nobody has to open a SQL editor to try ordering. Every
@@ -32,6 +33,12 @@ create table if not exists joc_orders (
   address               text not null,
   landmark              text not null default '',
   special_instructions  text not null default '',
+  delivery_area         text,
+  delivery_area_confirmed boolean,
+  -- Retained from migration 004 and never written again. JOC measures no distance
+  -- now; these five columns are read-only history for orders accepted under the old
+  -- road-distance rule. Kept so this file, db/schema.sql and a database upgraded
+  -- through 004 + 005 all have the same shape.
   delivery_distance_meters integer,
   delivery_radius_km    numeric(6,2),
   delivery_eligible     boolean,
@@ -81,12 +88,32 @@ alter table joc_orders add column if not exists payment_verified_by text;
 -- Column first, constraint second — Postgres will not accept a CHECK that names
 -- a column which does not exist yet.
 alter table joc_orders add column if not exists customer_email text;
+-- The migration 004 delivery-distance columns are re-asserted here even though the
+-- create table above still declares them. A database provisioned from an earlier
+-- revision of this file may never have had them added, and dropping the statement
+-- would let such an instance fail on a column the old code wrote. They are inert
+-- from migration 005 onwards; these exist to make the two install paths converge.
 alter table joc_orders add column if not exists delivery_distance_meters integer;
 alter table joc_orders add column if not exists delivery_radius_km numeric(6,2);
 alter table joc_orders add column if not exists delivery_eligible boolean;
 alter table joc_orders add column if not exists delivery_checked_at timestamptz;
 alter table joc_orders add column if not exists delivery_outcome text;
 alter table joc_orders add column if not exists tracking_token text;
+
+-- Migration 005. The delivery area the customer chose and their explicit
+-- confirmation of the address, replacing the old road-distance verification.
+--
+-- Both are NULLable and unconstrained on purpose. There is no CHECK on
+-- delivery_area: the list lives in src/data/deliveryAreas.js, not in the database,
+-- so a database constraint would be a second copy of the rule to keep in step and
+-- would refuse rows for areas JOC has since renamed or removed. Membership is
+-- enforced in shared/delivery.js, which reads that one list.
+--
+-- delivery_area_confirmed is NOT DEFAULT true: a default would manufacture a
+-- confirmation nobody made. NULL means "this order predates the area list", which
+-- is a different fact from false.
+alter table joc_orders add column if not exists delivery_area text;
+alter table joc_orders add column if not exists delivery_area_confirmed boolean;
 
 -- ---------------------------------------------------------------------------
 -- Widen payment_provider to accept 'cod' FIRST (migration 003).
@@ -277,6 +304,8 @@ insert into joc_schema_migrations (version) values ('002_payment_provider_and_ad
 insert into joc_schema_migrations (version) values ('003_cod_payment_provider')
   on conflict (version) do nothing;
 insert into joc_schema_migrations (version) values ('004_delivery_and_notifications')
+  on conflict (version) do nothing;
+insert into joc_schema_migrations (version) values ('005_delivery_area_confirmation')
   on conflict (version) do nothing;
 `;
 

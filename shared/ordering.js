@@ -7,6 +7,11 @@
  *
  * Plain ES module, no framework imports — safe in the browser and in Node.
  *
+ * The delivery AREA rule and its wording come from shared/delivery.js, which reads
+ * the configured list in src/data/deliveryAreas.js. There is no coordinate or
+ * measured distance involved anywhere: the customer picks an area and confirms
+ * their address, and JOC confirms the rest.
+ *
  * ----------------------------------------------------------------------------
  * DELIVERY PRICING IS NOT SET
  * JOC has not supplied a delivery policy, so the site does not invent one. The
@@ -17,6 +22,12 @@
  * checkout, the confirmation screen and the server all pick it up at once.
  * ----------------------------------------------------------------------------
  */
+
+import {
+  DELIVERY_AREA_CONFIRM_REQUIRED,
+  DELIVERY_AREA_REQUIRED,
+  validateDeliveryArea,
+} from "./delivery.js";
 
 /** Flat rupee amount added to every order. 0 = no charge is applied. */
 export const DELIVERY_CHARGE = 0;
@@ -271,6 +282,10 @@ export const VALIDATION_MESSAGES = {
   paymentMethod: "Please choose a payment method.",
   cart: "Your cart is empty.",
   item: "One of the items in your cart is no longer available. Please review your cart.",
+  // The delivery area rules and their wording live in shared/delivery.js, so the
+  // checkout, the server and the tests cannot end up with three different sentences.
+  deliveryArea: DELIVERY_AREA_REQUIRED,
+  deliveryAreaConfirmed: DELIVERY_AREA_CONFIRM_REQUIRED,
 };
 
 const NAME_RE = /^[\p{L}\p{M}][\p{L}\p{M}\s.'-]*$/u;
@@ -319,6 +334,16 @@ function cleanText(raw, max) {
  * Validate a checkout payload. Returns a field-keyed error map; an empty object
  * means valid. Identical rules run on the client (inline messages) and on the
  * server (the one that actually matters).
+ *
+ * The delivery area and its acknowledgement are validated here, by
+ * `validateDeliveryArea`, rather than inline below. They are a separate contract
+ * with their own wording and their own list, and folding them into this function
+ * would be how the checkout and the server ended up disagreeing about whether an
+ * area is acceptable.
+ *
+ * Every bad field is reported at once. A customer who has not chosen an area and
+ * has not ticked the box should see both problems at the first submit, not
+ * discover the second one after fixing the first.
  */
 export function validateCheckout(input, { requireItems = true } = {}) {
   const errors = {};
@@ -343,11 +368,35 @@ export function validateCheckout(input, { requireItems = true } = {}) {
     errors.cart = VALIDATION_MESSAGES.cart;
   }
 
+  // The area and the confirmation. Merged in rather than short-circuited, so one
+  // refusal never hides the others.
+  const deliveryArea = validateDeliveryArea(input);
+  Object.assign(errors, deliveryArea.errors);
+
+  const valid = Object.keys(errors).length === 0;
+
   return {
     errors,
-    valid: Object.keys(errors).length === 0,
-    value: Object.keys(errors).length === 0
-      ? { name, phone, email: email ?? null, address, landmark, instructions, paymentMethod: method }
+    valid,
+    value: valid
+      ? {
+          name,
+          phone,
+          email: email ?? null,
+          address,
+          landmark,
+          instructions,
+          paymentMethod: method,
+          // Normalised id from the configured list, plus the label resolved from
+          // that same list. Neither comes from the request body as a display
+          // string, so a tampered payload cannot invent an area name that reaches
+          // the admin dashboard or an email.
+          deliveryArea: deliveryArea.value.area,
+          deliveryAreaName: deliveryArea.value.areaName,
+          // A real boolean on the record, so an order row can never carry the
+          // string "false" and be read as confirmed.
+          deliveryAreaConfirmed: deliveryArea.value.confirmed,
+        }
       : null,
   };
 }

@@ -123,6 +123,13 @@ export function useOrderFlow({ onComplete }) {
             address: details.address,
             landmark: details.landmark,
             instructions: details.instructions,
+            // The area the customer chose from the published list, and their explicit
+            // acknowledgement of the address. Both are part of the request because the
+            // server refuses the order without them: a payload that omits either is
+            // indistinguishable from a customer who never chose an area or never
+            // agreed to anything.
+            deliveryArea: details.deliveryArea,
+            deliveryAreaConfirmed: details.deliveryAreaConfirmed,
             paymentMethod: details.paymentMethod,
           },
           idempotencyKey.current,

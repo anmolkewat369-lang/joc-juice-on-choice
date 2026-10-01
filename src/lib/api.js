@@ -46,8 +46,8 @@ async function request(path, { method = "GET", body, idempotencyKey, signal, hea
     const detail = payload?.error;
     // `errors` is a map of field name -> message, and only `invalid_checkout`
     // produces one. Every other refusal uses `details` for context that is NOT a
-    // field error (`delivery_unavailable` puts a distance and an outcome there),
-    // so hydrating the form from it would paste "OUT_OF_RANGE" onto an input.
+    // field error, so hydrating the form from it would paste a machine code onto an
+    // input.
     const fieldErrors = detail?.code === "invalid_checkout" ? detail?.errors ?? null : null;
     throw new ApiRequestError(
       detail?.message ?? "Something went wrong. Please try again.",
@@ -146,39 +146,6 @@ export const getOrderDetail = (orderId, { signal, token } = {}) => {
     headers: { "X-Order-Token": secret },
   });
 };
-
-/**
- * The delivery rule, without checking any address.
- *
- * Read once when the checkout opens so the form can state the rule before the
- * customer has typed anything. It comes from the same value the order route
- * enforces, which is the only way the sentence on the form cannot drift away
- * from the refusal the customer would get.
- */
-export const getDeliveryConfig = async ({ signal } = {}) => {
-  try {
-    return await request("/api/delivery/config", { signal });
-  } catch {
-    // No rule known. The checkout stays usable — the order route will still
-    // enforce the real limit — it just cannot preview it up front.
-    return { radiusKm: null, radiusMeters: null, configured: false, rule: null };
-  }
-};
-
-/**
- * Ask whether JOC can deliver to an address.
- *
- * A preview, and nothing more: the order route repeats the same check itself
- * before creating anything. `available: false` therefore means "we know you are
- * too far" OR "we could not check" — the caller shows the message either way,
- * because acting on the difference is the server's job, not the form's.
- */
-export const checkDelivery = ({ address, landmark }, { signal } = {}) =>
-  request("/api/delivery/check", {
-    method: "POST",
-    body: { address, landmark },
-    signal,
-  }).then((data) => data.delivery);
 
 /**
  * What the customer can pay with, per the server.

@@ -180,6 +180,78 @@
   color: var(--ink-400);
 }
 
+/* --------------------------- Delivery area block -------------------------- */
+
+/* States the rule above the fields, so the customer knows what is being asked of
+   them before they pick an area. */
+.areaNote {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-md);
+  background: var(--paper-warm);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  color: var(--ink-500);
+}
+
+/* The acknowledgement is a statement, not a control to skim past: it is given its
+   own block, leading above the checkbox, and never rendered as a bare tick. */
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius-md);
+  background: var(--paper-warm);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.confirmLabel {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--ink-800);
+  cursor: pointer;
+}
+
+/* A 1.15rem box rather than the browser default: a full-size tap target for the
+   statement, which is the one control on this screen that must not be missed. */
+.confirmInput {
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0.15rem 0 0;
+  accent-color: var(--green-600);
+  cursor: pointer;
+}
+
+.confirmInput:disabled {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.confirmInput:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: 3px;
+}
+
+.confirmInput[aria-invalid="true"] {
+  outline: 2px solid var(--berry-500);
+  outline-offset: 1px;
+}
+
+.confirmError {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--berry-600);
+}
+
 .summaryLinks {
   display: flex;
   align-items: center;

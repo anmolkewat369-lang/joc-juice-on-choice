@@ -27,10 +27,17 @@
 --                   after the order was placed, when a hash can no longer
 --                   reproduce the token. Never returned by any API route.
 --   * `customer_email` optional. NULL is a normal value, not a missing one.
---   * `delivery_*` the record that the server measured the address against the
---                   delivery radius before creating the order. NULL on orders
---                   placed before the rule existed, which is the truthful
---                   reading — see db/migrations/004_delivery_and_notifications.sql.
+--   * `delivery_area` the id of the area the customer picked from JOC's published
+--                   list (src/data/deliveryAreas.js), and
+--                   `delivery_area_confirmed` their statement that the address is
+--                   correct and inside that area. NULL on orders placed before
+--                   migration 005, which is the truthful reading. Neither column
+--                   carries a distance, coordinate or eligibility flag.
+--   * `delivery_distance_meters`, `delivery_radius_km`, `delivery_eligible`,
+--                   `delivery_outcome` and `delivery_checked_at` are read-only
+--                   history from migration 004. JOC no longer measures an address,
+--                   so these are never written again; they are kept so the record
+--                   of orders accepted under the old rule survives.
 --   * `payment_method` is what the customer chose (COD / UPI).
 --                   `payment_provider` is which rail settles it: `cod` for cash
 --                   on delivery, `manual_upi` or `razorpay` for a digital
@@ -60,9 +67,27 @@ create table if not exists joc_orders (
   landmark            text not null default '',
   special_instructions text not null default '',
 
-  -- The delivery verification the server performed before creating the order.
-  -- NULL across this whole group means "never verified", which is exactly what
-  -- is true of every order placed before migration 004.
+  -- The delivery area the customer chose, and their explicit confirmation that
+  -- the address they typed is correct and inside JOC's area. See
+  -- db/migrations/005_delivery_area_confirmation.sql.
+  delivery_area        text,
+  delivery_area_confirmed boolean,
+
+  -- Retained from migration 004, and deliberately kept.
+  --
+  -- These five columns record a road-distance check the server no longer performs:
+  -- JOC now publishes an area list and the customer confirms their own address, so
+  -- there is no measurement to store. They are NOT dropped, because rows written
+  -- before migration 005 hold the only record of which orders JOC accepted under the
+  -- old rule, and destroying that history would buy nothing.
+  --
+  -- Nothing reads or writes them any more: they simply stopped moving at migration
+  -- 005. Their presence here is intentional — a database built from this file has
+  -- the same shape as one upgraded through 004 and 005, so the two are
+  -- interchangeable. Treat them as read-only history.
+  --
+  -- NULL across this whole group means "never verified", which is exactly what is
+  -- true of every order placed before migration 004.
   delivery_distance_meters integer,
   delivery_radius_km   numeric(6,2),
   delivery_eligible    boolean,
