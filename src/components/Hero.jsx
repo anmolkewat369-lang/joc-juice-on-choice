@@ -37,7 +37,7 @@ export default function Hero() {
               Explore Menu
               <ArrowRight size={18} aria-hidden="true" />
             </a>
-            <a className="btn btn--ghost btn--lg" href={cartHref}>
+            <a className="btn btn--accent btn--lg" href={cartHref}>
               <ShoppingBag size={18} aria-hidden="true" />
               Order Now
             </a>

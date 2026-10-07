@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--paper);
   box-shadow: inset 0 0 0 1px var(--line);
   overflow: hidden;
@@ -13,52 +13,72 @@
 }
 
 .card:hover {
-  transform: translateY(-6px);
+  transform: translateY(-4px);
   box-shadow: inset 0 0 0 1px var(--line), var(--shadow-md);
 }
 
 .art {
   position: relative;
-  aspect-ratio: 4 / 3;
-  background: var(--paper-tint);
+  aspect-ratio: 1 / 1;
+  background:
+    radial-gradient(115% 92% at 50% 28%, #FFFFFF 0%, rgba(255, 255, 255, 0) 64%),
+    linear-gradient(180deg, #fffdf7 0%, #fbf6ec 55%, #f1eadb 100%);
   overflow: hidden;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Soft photographic vignette over the image area only. */
+.art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(104% 96% at 50% 46%, rgba(20, 38, 28, 0) 58%, rgba(20, 38, 28, 0.1) 100%);
 }
 
 .art > svg,
 .art > img {
+  position: relative;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform var(--dur-slow) var(--ease);
+  transition: transform 280ms var(--ease);
+}
+
+.art > img {
+  background: #fbf6ec;
 }
 
 .card:hover .art > svg,
-.card:hover .art > img {
-  transform: scale(1.06);
+.card:hover .art > img,
+.card:focus-within .art > svg,
+.card:focus-within .art > img {
+  transform: scale(1.03);
 }
 
 .badge {
   position: absolute;
   top: 0.7rem;
   left: 0.7rem;
+  z-index: 1;
 }
 
 .badgeShake {
-  background: rgba(72, 43, 26, 0.8);
+  background: rgba(74, 56, 46, 0.88);
 }
 
 .badgeCoffee {
-  background: rgba(58, 36, 22, 0.8);
+  background: rgba(58, 36, 22, 0.88);
 }
 
 .badgeCombo {
-  background: rgba(15, 26, 18, 0.84);
+  background: rgba(8, 61, 41, 0.9);
 }
 
 .body {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.42rem;
   padding: 1rem 1.05rem 1.1rem;
   flex: 1;
 }
@@ -72,10 +92,11 @@
 }
 
 .name {
-  font-size: 1.06rem;
+  font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: -0.015em;
-  line-height: 1.25;
+  line-height: 1.28;
+  color: var(--ink-900);
 }
 
 .size {
@@ -83,7 +104,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-400);
+  color: var(--ink-500);
   white-space: nowrap;
 }
 
@@ -98,13 +119,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
+  flex-wrap: wrap;
   margin-top: auto;
   padding-top: 0.85rem;
 }
 
 .price {
   font-family: var(--font-head);
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   font-weight: 700;
   color: var(--green-700);
   letter-spacing: -0.02em;
@@ -120,9 +142,9 @@
 
 /* Category tone chips */
 .toneJuice {
-  background: #eef7e8;
-  border-color: #dbeacf;
-  color: #3f7a1f;
+  background: #edf6e9;
+  border-color: #dbe9d2;
+  color: var(--green-700);
 }
 
 .toneShake {
@@ -138,8 +160,8 @@
 }
 
 .toneBite {
-  background: #fdf2e7;
-  border-color: #f3ddc8;
+  background: #fff2e2;
+  border-color: #ffe0bd;
   color: var(--orange-600);
 }
 
@@ -151,28 +173,24 @@
 
 /* --------------------------- Featured variant ---------------------- */
 
-.featured .art {
-  aspect-ratio: 1 / 1;
-}
-
 .featured .body {
   padding: 1.1rem 1.15rem 1.25rem;
 }
 
 .featured .name {
-  font-size: 1.14rem;
+  font-size: 1.16rem;
 }
 
 .featured .price {
-  font-size: 1.3rem;
+  font-size: 1.38rem;
 }
 
 /* ----------------------------- Combo variant ----------------------- */
 
 .combo {
-  border-radius: var(--radius-xl);
-  background: linear-gradient(180deg, #ffffff 0%, var(--paper-warm) 100%);
-  box-shadow: inset 0 0 0 1px var(--line-strong), var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow-sm);
 }
 
 .combo:hover {
@@ -180,11 +198,11 @@
 }
 
 .combo .art {
-  aspect-ratio: 16 / 11;
+  aspect-ratio: 1 / 1;
 }
 
 .combo .body {
-  padding: 1.2rem 1.35rem 1.4rem;
+  padding: 1.2rem 1.3rem 1.35rem;
   gap: 0.5rem;
 }
 

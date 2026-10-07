@@ -2,8 +2,7 @@
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(760px 420px at 88% 6%, rgba(76, 194, 74, 0.22), transparent 62%),
-    radial-gradient(620px 380px at 6% 96%, rgba(255, 122, 61, 0.14), transparent 60%),
+    radial-gradient(700px 400px at 90% 4%, rgba(255, 138, 0, 0.12), transparent 62%),
     var(--green-900);
 }
 
@@ -51,7 +50,6 @@
   border-radius: var(--radius-xl);
   background: rgba(255, 255, 255, 0.06);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(8px);
 }
 
 .cardLabel {
@@ -60,10 +58,10 @@
   font-weight: 700;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--lime-300);
+  color: var(--lime-400);
   padding: 0.3rem 0.6rem;
   border-radius: var(--radius-pill);
-  background: rgba(155, 229, 100, 0.14);
+  background: rgba(167, 212, 111, 0.16);
 }
 
 .cardName {
@@ -99,8 +97,8 @@
   height: 38px;
   flex: none;
   border-radius: 11px;
-  background: rgba(155, 229, 100, 0.16);
-  color: var(--green-300);
+  background: rgba(167, 212, 111, 0.18);
+  color: var(--lime-400);
 }
 
 .contactBody {

@@ -4,53 +4,68 @@
    ========================================================================== */
 
 :root {
-  /* Brand palette */
-  --green-900: #0f1a12;
-  --green-800: #16301f;
-  --green-700: #1d4a2c;
-  --green-600: #2a6a3c;
-  --green-500: #4cc24a;
-  --green-400: #6fd962;
-  --green-300: #9be564;
+  /* ------------------------------------------------------------------
+     JOC brand palette.
+     Green  = brand identity.
+     Orange = action / energy / highlight.
+     Cream  = warmth / background surfaces.
+     White  = clean product surfaces.
+     Charcoal = readable text.
+     ------------------------------------------------------------------ */
 
-  --lime-400: #d8f24b;
-  --lime-300: #eaf98a;
-  --yellow-400: #fde047;
+  /* JOC greens */
+  --green-900: #083d29; /* dark green — dark sections, footer, primary buttons */
+  --green-800: #0a4731;
+  --green-700: #0f5b3a; /* primary JOC green */
+  --green-600: #14714a;
+  --green-500: #1e8f5f; /* bright accent on light surfaces */
+  --green-400: #3fa876;
+  --green-300: #86d9a4; /* readable green on dark surfaces */
 
-  --orange-600: #e2571c;
-  --orange-500: #ff7a3d;
-  --orange-400: #ff9a68;
+  /* Fresh lime */
+  --lime-400: #a7d46f;
+  --lime-300: #dcefb9;
+  --yellow-400: #ffd25e;
 
+  /* Mango orange */
+  --orange-600: #e07000;
+  --orange-500: #ff8a00;
+  --orange-400: #ffa23a;
+
+  /* Support tones */
   --berry-600: #a3203f;
   --berry-500: #c62a4e;
 
   --cocoa-900: #221713;
   --cocoa-700: #4a382e;
 
-  --ink-900: #14181a;
-  --ink-800: #1f2622;
-  --ink-600: #46534b;
-  --ink-500: #62705f;
-  --ink-400: #8a978c;
+  /* Text */
+  --ink-900: #202522; /* charcoal */
+  --ink-800: #2a302c;
+  --ink-600: #4a534e;
+  --ink-500: #68716b; /* muted text */
+  --ink-400: #8b948e;
 
-  --line: #e4e9e2;
-  --line-strong: #d3dad1;
+  /* Lines — soft green-tinted borders */
+  --line: rgba(15, 91, 58, 0.1);
+  --line-strong: rgba(15, 91, 58, 0.2);
 
+  /* Surfaces */
   --paper: #ffffff;
-  --paper-warm: #fbfaf6;
-  --paper-tint: #f3f7f0;
+  --paper-warm: #fff8e7; /* warm cream */
+  --paper-tint: #f7f4ea; /* soft cream */
 
   /* Typography */
   --font-head: "Poppins", "Montserrat", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-body: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 
-  --fs-display: clamp(2.5rem, 1.35rem + 5.2vw, 5.25rem);
-  --fs-h2: clamp(1.85rem, 1.2rem + 2.6vw, 3.1rem);
-  --fs-h3: clamp(1.25rem, 1.05rem + 0.8vw, 1.65rem);
-  --fs-lead: clamp(1.02rem, 0.96rem + 0.32vw, 1.2rem);
+  --fs-display: clamp(2.6rem, 1.3rem + 5.4vw, 5.5rem);
+  --fs-h2: clamp(1.9rem, 1.2rem + 2.7vw, 3.15rem);
+  --fs-h3: clamp(1.28rem, 1.06rem + 0.82vw, 1.7rem);
+  --fs-lead: clamp(1.03rem, 0.96rem + 0.34vw, 1.22rem);
   --fs-body: 1rem;
-  --fs-sm: 0.875rem;
-  --fs-xs: 0.78rem;
+  --fs-sm: 0.895rem;
+  --fs-xs: 0.79rem;
 
   /* Layout */
   --container: 1200px;
@@ -59,25 +74,25 @@
   --section-y: clamp(3.75rem, 2.4rem + 5.2vw, 7.5rem);
   --radius-sm: 10px;
   --radius-md: 16px;
-  --radius-lg: 24px;
-  --radius-xl: 32px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
   --radius-pill: 999px;
 
   /* Surfaces & depth (soft, never heavy) */
-  --shadow-xs: 0 1px 2px rgba(15, 26, 18, 0.05);
-  --shadow-sm: 0 2px 10px rgba(15, 26, 18, 0.06);
-  --shadow-md: 0 14px 34px -18px rgba(15, 26, 18, 0.28);
-  --shadow-lg: 0 30px 60px -34px rgba(15, 26, 18, 0.38);
-  --ring: 0 0 0 3px rgba(76, 194, 74, 0.35);
+  --shadow-xs: 0 1px 2px rgba(8, 61, 41, 0.05);
+  --shadow-sm: 0 2px 10px rgba(8, 61, 41, 0.06);
+  --shadow-md: 0 14px 34px -18px rgba(8, 61, 41, 0.3);
+  --shadow-lg: 0 30px 60px -34px rgba(8, 61, 41, 0.4);
+  --ring: 0 0 0 3px rgba(15, 91, 58, 0.32);
 
   /* Motion */
   --ease: cubic-bezier(0.22, 0.68, 0.32, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-fast: 160ms;
-  --dur: 280ms;
-  --dur-slow: 620ms;
+  --dur: 260ms;
+  --dur-slow: 560ms;
 
-  --nav-h: 68px;
+  --nav-h: 70px;
   --cta-h: 60px;
 }
 
@@ -211,7 +226,7 @@ button {
 
 .section--dark {
   background: var(--green-900);
-  color: #dfe8e1;
+  color: #d8e7de;
 }
 
 .section--dark h2,
@@ -228,25 +243,25 @@ button {
 .eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
   font-family: var(--font-body);
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--green-600);
+  color: var(--green-700);
 }
 
 .eyebrow::before {
   content: "";
-  width: 22px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--green-500);
+  width: 24px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--orange-500);
 }
 
 .section--dark .eyebrow {
-  color: var(--green-300);
+  color: var(--lime-400);
 }
 
 .section-head {
@@ -273,23 +288,25 @@ button {
 }
 
 .section--dark .section-head p {
-  color: #b9c8be;
+  color: #b7cec1;
 }
 
 /* ---------- Buttons ---------- */
 
 .btn {
-  --btn-bg: var(--green-500);
-  --btn-fg: var(--green-900);
+  --btn-bg: var(--green-700);
+  --btn-fg: #ffffff;
+  --btn-radius: 13px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.55rem;
-  padding: 0.9rem 1.5rem;
-  border-radius: var(--radius-pill);
+  min-height: 46px;
+  padding: 0.78rem 1.4rem;
+  border-radius: var(--btn-radius);
   background: var(--btn-bg);
   color: var(--btn-fg);
-  font-size: 0.95rem;
+  font-size: 0.94rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -298,7 +315,8 @@ button {
     transform var(--dur) var(--ease),
     box-shadow var(--dur) var(--ease),
     background-color var(--dur) var(--ease),
-    color var(--dur) var(--ease);
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
 }
 
 .btn svg {
@@ -317,15 +335,33 @@ button {
 
 .btn:active {
   transform: translateY(0);
+  box-shadow: none;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .btn--primary {
-  --btn-bg: var(--green-900);
+  --btn-bg: var(--green-700);
   --btn-fg: #fff;
 }
 
 .btn--primary:hover {
   --btn-bg: var(--green-800);
+}
+
+/* Mango orange — ordering / energy actions. */
+.btn--accent {
+  --btn-bg: var(--orange-500);
+  --btn-fg: var(--green-900);
+}
+
+.btn--accent:hover {
+  --btn-bg: var(--orange-400);
 }
 
 .btn--lime {
@@ -337,21 +373,22 @@ button {
   --btn-bg: var(--lime-300);
 }
 
+/* Secondary: white/cream surface with a JOC green border. */
 .btn--ghost {
-  --btn-bg: transparent;
-  --btn-fg: var(--ink-900);
-  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+  --btn-bg: var(--paper);
+  --btn-fg: var(--green-700);
+  box-shadow: inset 0 0 0 1.5px var(--green-700);
 }
 
 .btn--ghost:hover {
-  --btn-bg: var(--paper);
-  box-shadow: inset 0 0 0 1.5px var(--green-600);
+  --btn-bg: var(--paper-tint);
+  box-shadow: inset 0 0 0 1.5px var(--green-700), var(--shadow-sm);
 }
 
 .btn--onDark {
   --btn-bg: rgba(255, 255, 255, 0.08);
   --btn-fg: #fff;
-  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.32);
 }
 
 .btn--onDark:hover {
@@ -364,12 +401,13 @@ button {
 }
 
 .btn--whatsapp:hover {
-  --btn-bg: #20c35c;
+  --btn-bg: #1fbf5b;
 }
 
 .btn--lg {
-  padding: 1.05rem 1.9rem;
+  padding: 0.95rem 1.8rem;
   font-size: 1rem;
+  min-height: 52px;
 }
 
 .btn--block {
@@ -382,13 +420,13 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.34rem 0.72rem;
+  padding: 0.34rem 0.74rem;
   border-radius: var(--radius-pill);
   background: var(--paper-tint);
   color: var(--green-700);
   font-size: var(--fs-xs);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   border: 1px solid var(--line);
 }
@@ -412,9 +450,9 @@ button {
 }
 
 .chip--dark {
-  background: rgba(15, 26, 18, 0.82);
+  background: rgba(8, 61, 41, 0.9);
   border-color: rgba(255, 255, 255, 0.16);
-  color: #eaf3ec;
+  color: #eaf5ee;
   backdrop-filter: blur(4px);
 }
 

@@ -32,6 +32,7 @@ export default function MenuCard({
   orderable = true,
 }) {
   const variantClass = styles[variant] ? ` ${styles[variant]}` : "";
+  const hasPhoto = Boolean(item.image);
 
   return (
     <article className={`${styles.card}${variantClass}`}>
@@ -40,8 +41,8 @@ export default function MenuCard({
           art={item.art}
           tone={item.tone}
           image={item.image}
-          alt={`${item.name}${item.size ? `, ${item.size}` : ""} — demo illustration`}
-          decorative
+          alt={hasPhoto ? `${item.name}${item.size ? `, ${item.size}` : ""}` : ""}
+          decorative={!hasPhoto}
         />
         {item.badge ? (
           <span className={`chip chip--dark ${styles.badge} ${BADGE_CLASS[item.category] ?? ""}`}>

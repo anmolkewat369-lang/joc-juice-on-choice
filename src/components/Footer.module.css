@@ -1,8 +1,8 @@
 .footer {
-  background: #0b130d;
-  color: #a9b8ae;
+  background: var(--green-900);
+  color: #b9cec2;
   padding-block: clamp(2.5rem, 1.6rem + 3.4vw, 4rem) 1.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 3px solid var(--orange-500);
 }
 
 .top {
@@ -27,20 +27,20 @@
   font-weight: 600;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--green-400);
+  color: var(--lime-400);
 }
 
 .categoryLine {
   margin-top: 0.7rem;
   font-size: var(--fs-sm);
-  color: #c3d2c8;
+  color: #cfe0d5;
 }
 
 .address {
   margin-top: 0.9rem;
   font-size: var(--fs-sm);
   line-height: 1.7;
-  color: #8b9b91;
+  color: #9db3a6;
 }
 
 .mapLink {
@@ -48,14 +48,14 @@
   margin-top: 0.7rem;
   font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--green-300);
+  color: var(--lime-400);
   text-decoration: underline;
   text-underline-offset: 4px;
   transition: color var(--dur-fast) var(--ease);
 }
 
 .mapLink:hover {
-  color: var(--lime-300);
+  color: #fff;
 }
 
 .colTitle {
@@ -63,7 +63,7 @@
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #7f9187;
+  color: #8fa79a;
   margin-bottom: 0.9rem;
 }
 
@@ -78,7 +78,7 @@
   align-items: center;
   gap: 0.45rem;
   font-size: var(--fs-sm);
-  color: #c3d2c8;
+  color: #d3e2d8;
   /* A phone number or an email address is one long unbreakable token. Without this
      it forces the column wider than the viewport and the whole page scrolls
      sideways on a phone. */
@@ -89,7 +89,7 @@
 }
 
 .link:hover {
-  color: #fff;
+  color: var(--lime-400);
   transform: translateX(3px);
 }
 
@@ -117,7 +117,7 @@
   margin-top: 0.85rem;
   font-size: var(--fs-xs);
   line-height: 1.6;
-  color: #7f9187;
+  color: #8fa79a;
 }
 
 .disclaimer {
@@ -130,7 +130,7 @@
 .disclaimerText {
   font-size: var(--fs-xs);
   line-height: 1.7;
-  color: #8b9b91;
+  color: #a3b8ab;
 }
 
 .bottom {
@@ -141,13 +141,13 @@
   gap: 0.4rem 1.5rem;
   margin-top: 1.4rem;
   padding-top: 1.2rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   font-size: var(--fs-xs);
-  color: #7f9187;
+  color: #8fa79a;
 }
 
 .credit strong {
-  color: #c3d2c8;
+  color: #d3e2d8;
   font-weight: 700;
 }
 

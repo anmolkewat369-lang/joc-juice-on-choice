@@ -68,7 +68,7 @@
 
 .hint {
   font-size: var(--fs-xs);
-  color: var(--ink-400);
+  color: var(--ink-500);
 }
 
 .mapCard {
@@ -91,7 +91,7 @@
 .mapNote {
   padding: 0.85rem 1.1rem;
   font-size: var(--fs-xs);
-  color: var(--ink-400);
+  color: var(--ink-500);
   border-top: 1px solid var(--line);
 }
 

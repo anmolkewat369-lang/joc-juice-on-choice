@@ -50,7 +50,7 @@ export const MENU_ITEMS = [
     description: "Crisp, naturally sweet pressed apple juice.",
     art: "juice",
     tone: "apple",
-    image: null, // set to "/images/apple-juice.jpg" when a real photo is supplied
+    image: "/images/menu/apple-juice.jpg",
   },
   {
     id: "orange-juice",
@@ -62,7 +62,7 @@ export const MENU_ITEMS = [
     art: "juice",
     tone: "orange",
     badge: "Fresh",
-    image: null, // set to "/images/orange-juice.jpg" when a real photo is supplied
+    image: "/images/menu/orange-juice.jpg",
   },
   {
     id: "banana-juice",
@@ -73,7 +73,7 @@ export const MENU_ITEMS = [
     description: "Thick, smooth and naturally creamy.",
     art: "juice",
     tone: "banana",
-    image: null, // set to "/images/banana-juice.jpg" when a real photo is supplied
+    image: "/images/menu/banana-juice.jpg",
   },
   {
     id: "pomegranate-juice",
@@ -84,7 +84,7 @@ export const MENU_ITEMS = [
     description: "Sweet-tangy pomegranate with real fruit character.",
     art: "juice",
     tone: "pomegranate",
-    image: null, // set to "/images/pomegranate-juice.jpg" when a real photo is supplied
+    image: "/images/menu/pomegranate-juice.jpg",
   },
   {
     id: "watermelon-juice",
@@ -96,7 +96,7 @@ export const MENU_ITEMS = [
     art: "juice",
     tone: "watermelon",
     badge: "Chilled",
-    image: null, // set to "/images/watermelon-juice.jpg" when a real photo is supplied
+    image: "/images/menu/watermelon-juice.jpg",
   },
 
   /* ------------------------------- SHAKES ------------------------------- */
@@ -108,7 +108,7 @@ export const MENU_ITEMS = [
     description: "Rich chocolate milkshake, thick and creamy.",
     art: "shake",
     tone: "chocolate",
-    image: null, // set to "/images/chocolate-shake.jpg" when a real photo is supplied
+    image: "/images/menu/kitkat-shake.jpg",
   },
   {
     id: "oreo-shake",
@@ -119,7 +119,7 @@ export const MENU_ITEMS = [
     art: "shake",
     tone: "oreo",
     badge: "Creamy",
-    image: null, // set to "/images/oreo-shake.jpg" when a real photo is supplied
+    image: "/images/menu/oreo-shake.jpg",
   },
   {
     id: "kitkat-shake",
@@ -129,7 +129,7 @@ export const MENU_ITEMS = [
     description: "Thick shake with crushed KitKat chunks.",
     art: "shake",
     tone: "kitkat",
-    image: null, // set to "/images/kitkat-shake.jpg" when a real photo is supplied
+    image: "/images/menu/kitkat-shake.jpg",
   },
 
   /* ------------------------------- COFFEE ------------------------------- */
@@ -142,7 +142,7 @@ export const MENU_ITEMS = [
     art: "coffee",
     tone: "hot",
     badge: "Hot",
-    image: null, // set to "/images/hot-coffee.jpg" when a real photo is supplied
+    image: "/images/menu/hot-coffee.jpg",
   },
   {
     id: "cold-coffee",
@@ -153,7 +153,7 @@ export const MENU_ITEMS = [
     art: "coldCoffee",
     tone: "cold",
     badge: "Chilled",
-    image: null, // set to "/images/cold-coffee.jpg" when a real photo is supplied
+    image: "/images/menu/cold-coffee.jpg",
   },
   {
     id: "cold-coffee-ice-cream",
@@ -164,7 +164,7 @@ export const MENU_ITEMS = [
     art: "coldCoffee",
     tone: "icecream",
     badge: "Signature",
-    image: null, // set to "/images/cold-coffee-ice-cream.jpg" when a real photo is supplied
+    image: "/images/menu/cold-coffee-ice-cream.jpg",
   },
   {
     id: "iced-coffee",
@@ -175,7 +175,7 @@ export const MENU_ITEMS = [
     art: "coldCoffee",
     tone: "iced",
     badge: "Iced",
-    image: null, // set to "/images/iced-coffee.jpg" when a real photo is supplied
+    image: "/images/menu/iced-coffee.jpg",
   },
   {
     id: "oreo-cold-coffee",
@@ -185,7 +185,7 @@ export const MENU_ITEMS = [
     description: "Cold coffee blended with Oreo cookies.",
     art: "coldCoffee",
     tone: "oreo",
-    image: null, // set to "/images/oreo-cold-coffee.jpg" when a real photo is supplied
+    image: "/images/menu/oreo-cold-coffee.jpg",
   },
 
   /* --------------------------------- TEA --------------------------------- */
@@ -197,7 +197,7 @@ export const MENU_ITEMS = [
     description: "One cup of tea",
     art: "coffee",
     tone: "hot",
-    image: null,
+    image: "/images/menu/hot-coffee.jpg",
   },
 
   /* ----------------------------- SANDWICHES ----------------------------- */
@@ -209,7 +209,7 @@ export const MENU_ITEMS = [
     description: "Grilled sandwich with a seasoned vegetable filling.",
     art: "sandwich",
     tone: "veg",
-    image: null, // set to "/images/veg-sandwich.jpg" when a real photo is supplied
+    image: "/images/menu/veg-sandwich.jpg",
   },
   {
     id: "aloo-sandwich",
@@ -219,7 +219,7 @@ export const MENU_ITEMS = [
     description: "Classic spiced potato sandwich.",
     art: "sandwich",
     tone: "aloo",
-    image: null, // set to "/images/aloo-sandwich.jpg" when a real photo is supplied
+    image: "/images/menu/aloo-sandwich.jpg",
   },
   {
     id: "cheese-sandwich",
@@ -230,7 +230,7 @@ export const MENU_ITEMS = [
     art: "sandwich",
     tone: "cheese",
     badge: "Cheese",
-    image: null, // set to "/images/cheese-sandwich.jpg" when a real photo is supplied
+    image: "/images/menu/cheese-sandwich.jpg",
   },
   {
     id: "paneer-sandwich",
@@ -240,7 +240,7 @@ export const MENU_ITEMS = [
     description: "Spiced paneer with sauce, toasted.",
     art: "sandwich",
     tone: "paneer",
-    image: null, // set to "/images/paneer-sandwich.jpg" when a real photo is supplied
+    image: "/images/menu/paneer-sandwich.jpg",
   },
   {
     id: "jumbo-sandwich",
@@ -251,7 +251,7 @@ export const MENU_ITEMS = [
     art: "sandwich",
     tone: "jumbo",
     badge: "Jumbo",
-    image: null, // set to "/images/jumbo-sandwich.jpg" when a real photo is supplied
+    image: "/images/menu/jumbo-sandwich.jpg",
   },
 
   /* -------------------------------- MOMOS ------------------------------- */
@@ -263,7 +263,7 @@ export const MENU_ITEMS = [
     description: "Soft steamed momos with a vegetable filling.",
     art: "momo",
     tone: "veg",
-    image: null, // set to "/images/veg-momos.jpg" when a real photo is supplied
+    image: "/images/menu/veg-momos.jpg",
   },
   {
     id: "paneer-momos",
@@ -274,7 +274,7 @@ export const MENU_ITEMS = [
     art: "momo",
     tone: "paneer",
     badge: "Spiced",
-    image: null, // set to "/images/paneer-momos.jpg" when a real photo is supplied
+    image: "/images/menu/veg-momos.jpg",
   },
   {
     id: "kurkure-momos",
@@ -284,7 +284,7 @@ export const MENU_ITEMS = [
     description: "Crisp-topped momos with a crunchy coating.",
     art: "momo",
     tone: "kurkure",
-    image: null, // set to "/images/kurkure-momos.jpg" when a real photo is supplied
+    image: "/images/menu/kurkure-momos.jpg",
   },
 
   /* -------------------------------- PASTA ------------------------------- */
@@ -296,7 +296,7 @@ export const MENU_ITEMS = [
     description: "Pasta tossed in a seasoned tomato sauce.",
     art: "pasta",
     tone: "veg",
-    image: null, // set to "/images/veg-pasta.jpg" when a real photo is supplied
+    image: "/images/menu/veg-pasta.jpg",
   },
   {
     id: "cheese-pasta",
@@ -307,7 +307,7 @@ export const MENU_ITEMS = [
     art: "pasta",
     tone: "cheese",
     badge: "Creamy",
-    image: null, // set to "/images/cheese-pasta.jpg" when a real photo is supplied
+    image: "/images/menu/cheese-pasta.jpg",
   },
   {
     id: "paneer-pasta",
@@ -317,7 +317,7 @@ export const MENU_ITEMS = [
     description: "Pasta with savoury spiced paneer.",
     art: "pasta",
     tone: "paneer",
-    image: null, // set to "/images/paneer-pasta.jpg" when a real photo is supplied
+    image: "/images/menu/paneer-pasta.jpg",
   },
 
   /* -------------------------------- MAGGI ------------------------------- */
@@ -329,7 +329,7 @@ export const MENU_ITEMS = [
     description: "Classic noodles, cooked hot and ready to eat.",
     art: "maggi",
     tone: "veg",
-    image: null, // set to "/images/veg-maggi.jpg" when a real photo is supplied
+    image: "/images/menu/veg-maggi.jpg",
   },
   {
     id: "cheese-maggi",
@@ -339,7 +339,7 @@ export const MENU_ITEMS = [
     description: "Noodles topped with melted cheese.",
     art: "maggi",
     tone: "cheese",
-    image: null, // set to "/images/cheese-maggi.jpg" when a real photo is supplied
+    image: "/images/menu/veg-maggi.jpg",
   },
   {
     id: "paneer-maggi",
@@ -349,7 +349,7 @@ export const MENU_ITEMS = [
     description: "Noodles with spiced paneer on top.",
     art: "maggi",
     tone: "paneer",
-    image: null, // set to "/images/paneer-maggi.jpg" when a real photo is supplied
+    image: "/images/menu/paneer-maggi.jpg",
   },
 
   /* ------------------------------- COMBOS ------------------------------- */
@@ -361,7 +361,7 @@ export const MENU_ITEMS = [
     description: combosNote,
     art: "combo",
     tone: "classic",
-    image: null, // set to "/images/classic-combo.jpg" when a real photo is supplied
+    image: "/images/menu/classic-combo.jpg",
   },
   {
     id: "maggi-combo",
@@ -371,7 +371,7 @@ export const MENU_ITEMS = [
     description: "A Maggi-based combo option.",
     art: "combo",
     tone: "maggi",
-    image: null, // set to "/images/maggi-combo.jpg" when a real photo is supplied
+    image: "/images/menu/maggi-combo.jpg",
   },
   {
     id: "momo-combo",
@@ -381,7 +381,7 @@ export const MENU_ITEMS = [
     description: "A momo-based combo option.",
     art: "combo",
     tone: "momo",
-    image: null, // set to "/images/momo-combo.jpg" when a real photo is supplied
+    image: "/images/menu/momo-combo.jpg",
   },
   {
     id: "paneer-sandwich-combo",
@@ -391,7 +391,7 @@ export const MENU_ITEMS = [
     description: "Built around the paneer sandwich.",
     art: "combo",
     tone: "paneer",
-    image: null, // set to "/images/paneer-sandwich-combo.jpg" when a real photo is supplied
+    image: "/images/menu/paneer-sandwich-combo.jpg",
   },
   {
     id: "paneer-oreo-combo",
@@ -401,7 +401,7 @@ export const MENU_ITEMS = [
     description: "Pairs a paneer item with an Oreo shake.",
     art: "combo",
     tone: "oreo",
-    image: null, // set to "/images/paneer-oreo-combo.jpg" when a real photo is supplied
+    image: "/images/menu/paneer-oreo-combo.jpg",
   },
   {
     id: "jumbo-shake-combo",
@@ -411,7 +411,7 @@ export const MENU_ITEMS = [
     description: "A larger shake combo option.",
     art: "combo",
     tone: "shake",
-    image: null, // set to "/images/jumbo-shake-combo.jpg" when a real photo is supplied
+    image: "/images/menu/jumbo-shake-combo.jpg",
   },
   {
     id: "double-coffee-combo",
@@ -421,7 +421,7 @@ export const MENU_ITEMS = [
     description: "A coffee combo for two.",
     art: "combo",
     tone: "coffee",
-    image: null, // set to "/images/double-coffee-combo.jpg" when a real photo is supplied
+    image: "/images/menu/double-coffee-combo.jpg",
   },
   {
     id: "momos-for-two",
@@ -432,7 +432,7 @@ export const MENU_ITEMS = [
     art: "combo",
     tone: "two",
     badge: "For Two",
-    image: null, // set to "/images/momos-for-two.jpg" when a real photo is supplied
+    image: "/images/menu/momos-for-two.jpg",
   },
   {
     id: "couple-sandwich-combo",
@@ -443,7 +443,7 @@ export const MENU_ITEMS = [
     art: "combo",
     tone: "couple",
     badge: "For Two",
-    image: null, // set to "/images/couple-sandwich-combo.jpg" when a real photo is supplied
+    image: "/images/menu/couple-sandwich-combo.jpg",
   },
   {
     id: "jumbo-meal-combo",
@@ -454,7 +454,7 @@ export const MENU_ITEMS = [
     art: "combo",
     tone: "jumbo",
     badge: "Jumbo",
-    image: null, // set to "/images/jumbo-meal-combo.jpg" when a real photo is supplied
+    image: "/images/menu/jumbo-meal-combo.jpg",
   },
 ];
 

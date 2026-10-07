@@ -3,8 +3,7 @@
   padding-top: calc(var(--nav-h) + clamp(2rem, 1rem + 4vw, 4.5rem));
   padding-bottom: clamp(2.5rem, 1.5rem + 4vw, 5rem);
   background:
-    radial-gradient(1100px 520px at 88% -8%, rgba(155, 229, 100, 0.28), transparent 62%),
-    radial-gradient(760px 420px at 4% 12%, rgba(253, 224, 71, 0.22), transparent 60%),
+    radial-gradient(900px 480px at 92% -10%, rgba(167, 212, 111, 0.3), transparent 62%),
     var(--paper-warm);
   overflow: hidden;
 }
@@ -21,14 +20,14 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1.15rem;
+  gap: 1.2rem;
 }
 
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.42rem 0.85rem;
+  gap: 0.5rem;
+  padding: 0.45rem 0.9rem;
   border-radius: var(--radius-pill);
   background: var(--paper);
   box-shadow: inset 0 0 0 1px var(--line), var(--shadow-xs);
@@ -45,26 +44,27 @@
 .title {
   display: flex;
   flex-direction: column;
-  gap: 0.1em;
+  gap: 0.06em;
   font-size: var(--fs-display);
   font-weight: 800;
   letter-spacing: -0.035em;
   text-transform: uppercase;
-  line-height: 0.98;
+  line-height: 0.96;
 }
 
 .titleTop {
-  color: var(--ink-900);
+  color: var(--green-800);
 }
 
 .titleBottom {
-  color: var(--ink-900);
+  color: var(--green-800);
 }
 
 .titleBottom em {
   font-style: normal;
   position: relative;
-  color: var(--green-600);
+  z-index: 0;
+  color: var(--orange-600);
 }
 
 .titleBottom em::after {
@@ -72,12 +72,11 @@
   position: absolute;
   left: 0.02em;
   right: 0.02em;
-  bottom: -0.06em;
-  height: 0.14em;
+  bottom: -0.02em;
+  height: 0.1em;
   border-radius: 999px;
   background: var(--lime-400);
   z-index: -1;
-  opacity: 0.9;
 }
 
 .lead {
@@ -89,16 +88,16 @@
 .ctas {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.7rem;
+  gap: 0.75rem;
   width: 100%;
 }
 
 .stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 1.6rem;
+  gap: 0.4rem 1.9rem;
   margin-top: 0.35rem;
-  padding-top: 1.1rem;
+  padding-top: 1.15rem;
   border-top: 1px solid var(--line);
   width: 100%;
 }
@@ -111,7 +110,7 @@
 
 .stats strong {
   font-family: var(--font-head);
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--green-700);
 }
@@ -121,28 +120,17 @@
   font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--ink-400);
+  color: var(--ink-500);
 }
 
 /* ----------------------------- Visual ----------------------------- */
 
 .visual {
   position: relative;
-}
-
-.blob {
-  position: absolute;
-  inset: 8% 4% 6%;
-  border-radius: 46% 54% 58% 42% / 52% 44% 56% 48%;
-  background: linear-gradient(150deg, rgba(76, 194, 74, 0.24), rgba(216, 242, 75, 0.34));
-  filter: blur(2px);
-  animation: morph 14s var(--ease) infinite alternate;
-}
-
-@keyframes morph {
-  to {
-    border-radius: 58% 42% 40% 60% / 44% 58% 42% 56%;
-  }
+  padding: clamp(0.75rem, 0.4rem + 1.4vw, 1.35rem);
+  border-radius: var(--radius-xl);
+  background: var(--paper-tint);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 .grid {
@@ -153,38 +141,47 @@
 }
 
 .tile {
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--paper);
-  box-shadow: var(--shadow-md);
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow-xs);
   overflow: hidden;
-  transition: transform var(--dur) var(--ease);
+  transition: box-shadow var(--dur) var(--ease);
 }
 
 .tile svg {
   width: 100%;
   height: auto;
+  transition: transform var(--dur-slow) var(--ease);
+}
+
+.tile:hover {
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow-md);
+}
+
+.tile:hover svg {
+  transform: scale(1.03);
 }
 
 .tileShake {
-  transform: translateY(clamp(0.4rem, 2vw, 1.4rem));
+  transform: translateY(clamp(0.4rem, 2vw, 1.2rem));
 }
 
 .tileJuice {
-  transform: translateY(clamp(-0.2rem, -1vw, -0.8rem));
+  transform: translateY(clamp(-0.2rem, -1vw, -0.7rem));
 }
 
 .tileCoffee {
-  transform: translateY(clamp(0.7rem, 3vw, 1.9rem));
+  transform: translateY(clamp(0.6rem, 3vw, 1.6rem));
 }
 
 .tileBite {
-  transform: translateY(clamp(-0.3rem, -1.4vw, -1.2rem));
+  transform: translateY(clamp(-0.3rem, -1.4vw, -1rem));
 }
 
 .visualNote {
-  margin-top: 0.9rem;
+  margin-top: 0.85rem;
   font-size: var(--fs-xs);
-  color: var(--ink-400);
+  color: var(--ink-500);
   text-align: center;
 }
 
@@ -194,10 +191,15 @@
   }
 
   .grid {
-    gap: 1.15rem;
+    gap: 1.1rem;
   }
+}
 
-  .tile {
-    border-radius: var(--radius-xl);
+@media (max-width: 520px) {
+  .tileShake,
+  .tileJuice,
+  .tileCoffee,
+  .tileBite {
+    transform: none;
   }
 }

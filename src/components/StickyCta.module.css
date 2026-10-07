@@ -6,13 +6,11 @@
   z-index: 80;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem calc(0.65rem + env(safe-area-inset-bottom));
+  background: #fff;
   border-top: 1px solid var(--line);
-  box-shadow: 0 -8px 24px -18px rgba(15, 26, 18, 0.5);
+  box-shadow: 0 -10px 26px -20px rgba(8, 61, 41, 0.6);
   transform: translateY(120%);
   transition:
     transform var(--dur) var(--ease),
@@ -37,9 +35,15 @@
 .map {
   flex: 1 1 0;
   min-width: 0;
-  padding-block: 0.8rem;
-  padding-inline: 0.65rem;
+  padding-block: 0.78rem;
+  padding-inline: 0.6rem;
   white-space: nowrap;
+  box-shadow: none;
+}
+
+.whatsapp:hover,
+.map:hover {
+  box-shadow: var(--shadow-sm);
 }
 
 @media (min-width: 900px) {

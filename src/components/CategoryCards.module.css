@@ -12,13 +12,13 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 0.95rem;
   width: 100%;
-  padding: 1.1rem;
+  padding: 0.9rem 0.9rem 1.15rem;
   text-align: left;
-  border-radius: var(--radius-lg);
-  background: var(--paper-warm);
-  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow-xs);
   overflow: hidden;
   transition:
     transform var(--dur) var(--ease),
@@ -31,7 +31,7 @@
   position: absolute;
   inset: auto 0 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--green-500), var(--lime-400), var(--orange-500));
+  background: var(--green-700);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform var(--dur) var(--ease);
@@ -39,8 +39,7 @@
 
 .card:hover,
 .card:focus-visible {
-  transform: translateY(-6px);
-  background: var(--paper);
+  transform: translateY(-5px);
   box-shadow: inset 0 0 0 1px var(--line), var(--shadow-md);
 }
 
@@ -51,20 +50,23 @@
 
 .art {
   display: block;
-  border-radius: var(--radius-md);
-  background: var(--paper);
-  box-shadow: var(--shadow-xs);
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  background: var(--paper-tint);
   overflow: hidden;
 }
 
-.art svg {
+.art svg,
+.art img {
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
   transition: transform var(--dur-slow) var(--ease);
 }
 
-.card:hover .art svg {
-  transform: scale(1.05);
+.card:hover .art svg,
+.card:hover .art img {
+  transform: scale(1.03);
 }
 
 .body {
@@ -72,6 +74,7 @@
   flex-direction: column;
   gap: 0.35rem;
   flex: 1;
+  padding-inline: 0.2rem;
 }
 
 .titleRow {
@@ -83,7 +86,7 @@
 
 .title {
   font-family: var(--font-head);
-  font-size: 1.18rem;
+  font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: -0.015em;
   color: var(--ink-900);
@@ -99,7 +102,7 @@
 
 .card:hover .arrow,
 .card:focus-visible .arrow {
-  color: var(--green-600);
+  color: var(--orange-500);
   transform: translate(3px, -3px);
 }
 
@@ -111,10 +114,10 @@
 
 .count {
   margin-top: auto;
-  padding-top: 0.65rem;
+  padding-top: 0.7rem;
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--green-600);
+  color: var(--green-700);
 }

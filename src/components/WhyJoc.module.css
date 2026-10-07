@@ -39,8 +39,8 @@
 }
 
 .toneGreen {
-  background: #e6f5e2;
-  color: var(--green-600);
+  background: #e9f4e4;
+  color: var(--green-700);
 }
 
 .toneCocoa {
@@ -54,7 +54,7 @@
 }
 
 .toneOrange {
-  background: #fdeee3;
+  background: #fff2e2;
   color: var(--orange-600);
 }
 
