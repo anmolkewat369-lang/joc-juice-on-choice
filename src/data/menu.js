@@ -461,12 +461,9 @@ export const MENU_ITEMS = [
 /* ------------------------------ Derived data ------------------------------ */
 
 export const FEATURED_IDS = [
+  "orange-juice",
+  "kitkat-shake",
   "pomegranate-juice",
-  "watermelon-juice",
-  "oreo-shake",
-  "cold-coffee",
-  "paneer-sandwich",
-  "paneer-momos",
 ];
 
 export const COMBO_IDS = [

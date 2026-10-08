@@ -7,22 +7,26 @@ import styles from "./FeaturedMenu.module.css";
 
 export default function FeaturedMenu({ onSelectCategory }) {
   return (
-    <section className="section" id="featured" aria-labelledby="featured-title">
+    <section
+      className={`section section--paper ${styles.section}`}
+      id="featured"
+      aria-labelledby="featured-title"
+    >
       <div className="container">
         <div className={styles.head}>
           <div className="section-head">
-            <p className="eyebrow">Straight from the menu</p>
-            <h2 id="featured-title">Popular Choices</h2>
-            <p>
-              A few of the items on the current JOC menu, priced as listed publicly today.
-            </p>
+            <p className="eyebrow">Popular today</p>
+            <h2 id="featured-title">
+              Loved by <em>Our Customers</em>
+            </h2>
+            <p>Fresh, tasty picks from the current JOC menu.</p>
           </div>
           <button
             type="button"
             className={`btn btn--ghost ${styles.allLink}`}
             onClick={() => onSelectCategory("All")}
           >
-            See the full menu
+            View All
             <ArrowRight size={17} aria-hidden="true" />
           </button>
         </div>

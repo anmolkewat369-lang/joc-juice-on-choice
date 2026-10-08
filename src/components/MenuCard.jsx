@@ -35,7 +35,7 @@ export default function MenuCard({
   const hasPhoto = Boolean(item.image);
 
   return (
-    <article className={`${styles.card}${variantClass}`}>
+    <article className={`${styles.card}${variantClass}`} data-category={item.category}>
       <div className={styles.art}>
         <FoodArt
           art={item.art}
@@ -69,7 +69,7 @@ export default function MenuCard({
 
         {orderable ? (
           <div className={styles.order}>
-            <AddToCartButton item={item} />
+            <AddToCartButton item={item} compact={variant === "featured"} />
           </div>
         ) : null}
       </div>

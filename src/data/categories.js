@@ -9,8 +9,7 @@ export const CATEGORY_CARDS = [
     title: "Fresh Juices",
     blurb: "Refreshing fruit-based drinks.",
     filter: "Juices",
-    art: "juice",
-    tone: "orange",
+    image: "/images/menu/orange-juice.jpg",
     count: 5,
   },
   {
@@ -18,8 +17,7 @@ export const CATEGORY_CARDS = [
     title: "Shakes",
     blurb: "Creamy and indulgent favourites.",
     filter: "Shakes",
-    art: "shake",
-    tone: "chocolate",
+    image: "/images/menu/oreo-shake.jpg",
     count: 3,
   },
   {
@@ -27,8 +25,7 @@ export const CATEGORY_CARDS = [
     title: "Coffee",
     blurb: "Hot and chilled coffee options.",
     filter: "Coffee",
-    art: "coffee",
-    tone: "hot",
+    image: "/images/menu/cold-coffee.jpg",
     count: 5,
   },
   {
@@ -36,8 +33,7 @@ export const CATEGORY_CARDS = [
     title: "Quick Bites",
     blurb: "Sandwiches, momos, pasta and Maggi.",
     filter: "Sandwiches",
-    art: "momo",
-    tone: "paneer",
+    image: "/images/menu/kurkure-momos.jpg",
     count: 14,
   },
 ];

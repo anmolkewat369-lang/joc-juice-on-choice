@@ -16,6 +16,10 @@ import styles from "./Navbar.module.css";
 const onRootPath = () =>
   typeof window === "undefined" || window.location.pathname === "/";
 const sectionHref = (hash) => (onRootPath() ? hash : `/${hash}`);
+const PRIMARY_LINKS = [
+  ...NAV_LINKS.filter((link) => link.href !== "#location"),
+  { label: "Contact", href: "#contact" },
+];
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -40,7 +44,7 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    const sections = NAV_LINKS.map((link) => document.querySelector(link.href)).filter(Boolean);
+    const sections = PRIMARY_LINKS.map((link) => document.querySelector(link.href)).filter(Boolean);
     if (!sections.length) return undefined;
 
     const observer = new IntersectionObserver(
@@ -83,29 +87,22 @@ export default function Navbar() {
   return (
     <header className={`${styles.header} ${scrolled ? styles.isScrolled : ""}`}>
       <div className={`container ${styles.inner}`}>
-        {/*
-          Temporary text wordmark + mark.
-          To use the real JOC logo, drop the file in /public and swap the
-          <span className={styles.logoMark}> block below for an <img> with the
-          brand's alt text. Nothing else needs to change.
-        */}
         <a className={styles.logo} href={sectionHref("#home")} aria-label={`${BRAND.name} — home`}>
-          <span className={styles.logoMark} aria-hidden="true">
-            <svg viewBox="0 0 32 32" focusable="false">
-              <path d="M9 4h14l-2 20a3 3 0 0 1-3 2.6h-4A3 3 0 0 1 11 24L9 4Z" fill="currentColor" />
-              <rect x="17" y="1" width="2.4" height="14" rx="1.2" transform="rotate(12 18 8)" fill="#FDE047" />
-              <circle cx="24" cy="9" r="3" fill="#FF7A3D" />
-            </svg>
-          </span>
-          <span className={styles.logoText}>
-            <strong>{BRAND.wordmark}</strong>
-            <em>{BRAND.tagline}</em>
-          </span>
+          <picture>
+            <source media="(max-width: 739px)" srcSet="/joc-mark.png" />
+            <img
+              className={styles.logoImage}
+              src="/joc-logo.png"
+              alt="JOC Juice & Cafe — Sip, Savor, Feel Good."
+              width="1152"
+              height="768"
+            />
+          </picture>
         </a>
 
         <nav className={styles.desktopNav} aria-label="Primary">
           <ul className={styles.navList}>
-            {NAV_LINKS.map((link) => (
+            {PRIMARY_LINKS.map((link) => (
               <li key={link.href}>
                 <a
                   className={`${styles.navLink} ${active === link.href ? styles.navLinkActive : ""}`}
@@ -176,7 +173,7 @@ export default function Navbar() {
       >
         <nav aria-label="Mobile">
           <ul className={styles.mobileList}>
-            {NAV_LINKS.map((link) => (
+            {PRIMARY_LINKS.map((link) => (
               <li key={link.href}>
                 <a className={styles.mobileLink} href={sectionHref(link.href)} onClick={closeMenu}>
                   {link.label}

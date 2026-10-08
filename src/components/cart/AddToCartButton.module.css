@@ -26,6 +26,27 @@
     box-shadow var(--dur-fast) var(--ease);
 }
 
+.addLabel {
+  display: inline;
+}
+
+.compact {
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--green-700);
+  color: #fff;
+}
+
+.compact:hover {
+  background: var(--green-800);
+}
+
+.compact .addLabel {
+  display: none;
+}
+
 .add:hover {
   background: var(--orange-400);
   box-shadow: var(--shadow-sm);
@@ -45,4 +66,15 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--green-700);
+}
+
+@media (max-width: 560px) {
+  .compact {
+    width: 25px;
+    min-height: 25px;
+  }
+
+  .compact svg {
+    width: 13px;
+  }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ShoppingBag } from "lucide-react";
+import { Check, Plus, ShoppingBag } from "lucide-react";
 import { useCart } from "../../cart/cartStore";
 import QtyStepper from "./QtyStepper";
 import styles from "./AddToCartButton.module.css";
@@ -12,7 +12,7 @@ import styles from "./AddToCartButton.module.css";
  * change it without leaving the menu. The confirmation is announced politely
  * for screen readers.
  */
-export default function AddToCartButton({ item }) {
+export default function AddToCartButton({ item, compact = false }) {
   const { items, addItem, increment, decrement } = useCart();
   const [justAdded, setJustAdded] = useState(false);
   const timer = useRef(null);
@@ -32,9 +32,14 @@ export default function AddToCartButton({ item }) {
   if (qty === 0) {
     return (
       <div className={styles.wrap}>
-        <button type="button" className={styles.add} onClick={onAdd}>
-          <ShoppingBag size={16} aria-hidden="true" />
-          Add to Cart
+        <button
+          type="button"
+          className={`${styles.add} ${compact ? styles.compact : ""}`}
+          onClick={onAdd}
+          aria-label={`Add ${item.name} to cart`}
+        >
+          {compact ? <Plus size={19} aria-hidden="true" /> : <ShoppingBag size={16} aria-hidden="true" />}
+          <span className={styles.addLabel}>Add to Cart</span>
           <span className="visually-hidden"> — {item.name}</span>
         </button>
         <span className="visually-hidden" role="status" aria-live="polite">

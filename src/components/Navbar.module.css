@@ -2,10 +2,10 @@
   position: fixed;
   inset: 0 0 auto;
   z-index: 90;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(10px) saturate(130%);
-  -webkit-backdrop-filter: blur(10px) saturate(130%);
-  border-bottom: 1px solid transparent;
+  background: rgba(8, 48, 36, 0.96);
+  backdrop-filter: blur(14px) saturate(125%);
+  -webkit-backdrop-filter: blur(14px) saturate(125%);
+  border-bottom: 1px solid rgba(236, 244, 231, 0.08);
   transition:
     background-color var(--dur) var(--ease),
     box-shadow var(--dur) var(--ease),
@@ -13,9 +13,9 @@
 }
 
 .isScrolled {
-  background: rgba(255, 255, 255, 0.94);
-  border-bottom-color: var(--line);
-  box-shadow: var(--shadow-sm);
+  background: rgba(7, 43, 32, 0.97);
+  border-bottom-color: rgba(236, 244, 231, 0.12);
+  box-shadow: 0 8px 26px rgba(1, 20, 13, 0.18);
 }
 
 .inner {
@@ -31,48 +31,22 @@
 .logo {
   display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
   flex: none;
 }
 
-.logoMark {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--green-700);
-  color: var(--lime-400);
-  flex: none;
-  box-shadow: var(--shadow-xs);
+.logo picture {
+  display: block;
+  padding: 3px 7px;
+  border-radius: 10px;
+  background: var(--paper);
 }
 
-.logoMark svg {
-  width: 23px;
-  height: 23px;
-}
-
-.logoText {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.05;
-}
-
-.logoText strong {
-  font-family: var(--font-head);
-  font-size: 1.2rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  color: var(--green-800);
-}
-
-.logoText em {
-  font-style: normal;
-  font-size: 0.58rem;
-  font-weight: 600;
-  letter-spacing: 0.19em;
-  text-transform: uppercase;
-  color: var(--ink-500);
+.logoImage {
+  display: block;
+  width: clamp(104px, 12vw, 150px);
+  height: auto;
+  max-height: calc(var(--nav-h) - 14px);
+  object-fit: contain;
 }
 
 /* --------------------------- Desktop nav --------------------------- */
@@ -94,19 +68,19 @@
   border-radius: var(--radius-sm);
   font-size: 0.94rem;
   font-weight: 500;
-  color: var(--ink-600);
+  color: rgba(242, 247, 239, 0.78);
   transition:
     color var(--dur-fast) var(--ease),
     background-color var(--dur-fast) var(--ease);
 }
 
 .navLink:hover {
-  color: var(--green-700);
-  background: rgba(15, 91, 58, 0.06);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .navLinkActive {
-  color: var(--green-700);
+  color: #fff;
   font-weight: 600;
 }
 
@@ -118,7 +92,7 @@
   bottom: 0.1rem;
   height: 2.5px;
   border-radius: 3px;
-  background: var(--green-700);
+  background: #ff9a24;
 }
 
 /* ----------------------------- Actions ---------------------------- */
@@ -138,11 +112,11 @@
   gap: 0.45rem;
   padding: 0.6rem 0.95rem;
   border-radius: var(--radius-pill);
-  color: #fff;
+  color: #f8f5e9;
   font-size: 0.88rem;
   font-weight: 600;
-  background: var(--green-700);
-  box-shadow: var(--shadow-xs);
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
   transition:
     background-color var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease),
@@ -150,7 +124,7 @@
 }
 
 .cart:hover {
-  background: var(--green-800);
+  background: rgba(255, 255, 255, 0.17);
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
 }
@@ -170,12 +144,12 @@
   padding-inline: 0.28rem;
   border-radius: var(--radius-pill);
   background: var(--orange-500);
-  color: var(--green-900);
+  color: #1b2c1e;
   font-size: 0.68rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  box-shadow: 0 0 0 2px #fff;
+  box-shadow: 0 0 0 2px #0a3023;
 }
 
 .badge[data-empty="true"] {
@@ -185,21 +159,21 @@
 /* --------------------------- Account control ----------------------- */
 
 .accountLink {
-  display: inline-flex;
+  display: none;
   align-items: center;
   gap: 0.4rem;
   padding: 0.6rem 0.9rem;
   border-radius: var(--radius-pill);
-  background: var(--paper-tint);
-  box-shadow: inset 0 0 0 1px var(--line);
-  color: var(--green-800);
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  color: #f8f5e9;
   font-size: 0.88rem;
   font-weight: 600;
   transition: background-color var(--dur-fast) var(--ease);
 }
 
 .accountLink:hover {
-  background: var(--lime-300);
+  background: rgba(255, 255, 255, 0.17);
 }
 
 .accountLabel {
@@ -218,14 +192,14 @@
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: var(--paper-tint);
-  color: var(--green-800);
-  box-shadow: inset 0 0 0 1px var(--line);
+  background: rgba(255, 255, 255, 0.09);
+  color: #fffdf7;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.17);
   transition: background-color var(--dur-fast) var(--ease);
 }
 
 .burger:hover {
-  background: var(--lime-300);
+  background: rgba(255, 255, 255, 0.17);
 }
 
 .scrim {
@@ -233,7 +207,7 @@
   inset: var(--nav-h) 0 0;
   z-index: 70;
   width: 100%;
-  background: rgba(8, 61, 41, 0.38);
+  background: rgba(4, 25, 19, 0.56);
   animation: fade var(--dur) var(--ease);
   cursor: default;
 }
@@ -256,9 +230,9 @@
   flex-direction: column;
   gap: 1rem;
   padding: 0.9rem var(--gutter) 1.4rem;
-  background: #fff;
-  border-bottom: 1px solid var(--line);
-  box-shadow: var(--shadow-md);
+  background: #0a3427;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 40px rgba(1, 20, 13, 0.3);
   animation: drop var(--dur) var(--ease-out);
   max-height: calc(100dvh - var(--nav-h));
   overflow-y: auto;
@@ -286,14 +260,14 @@
   font-family: var(--font-head);
   font-size: 1.06rem;
   font-weight: 600;
-  color: var(--ink-900);
-  border-bottom: 1px solid var(--line);
+  color: #f7f5eb;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   transition: color var(--dur-fast) var(--ease), padding-left var(--dur-fast) var(--ease);
 }
 
 .mobileLink:hover,
 .mobileLink:focus-visible {
-  color: var(--green-700);
+  color: #ffb342;
   padding-left: 0.6rem;
 }
 
@@ -302,7 +276,7 @@
   text-align: left;
   background: none;
   border: 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   cursor: pointer;
   font: inherit;
 }
@@ -316,11 +290,34 @@
 
 /* ----------------------------- Breakpoints ------------------------- */
 
-@media (min-width: 900px) {
+@media (min-width: 740px) {
   .desktopNav {
     display: block;
   }
 
+  .inner {
+    gap: 0.5rem;
+  }
+
+  .navList {
+    gap: 0;
+  }
+
+  .navLink {
+    padding-inline: 0.55rem;
+    font-size: 0.82rem;
+  }
+
+  .navList > li:last-child {
+    display: none;
+  }
+
+  .accountLink {
+    display: none;
+  }
+}
+
+@media (min-width: 1100px) {
   .cartLabel,
   .accountLabel {
     display: inline;
@@ -332,7 +329,77 @@
     display: none;
   }
 
+  .accountLink {
+    display: inline-flex;
+  }
+
+  .navList > li:last-child {
+    display: list-item;
+  }
+
   .burger {
+    display: none;
+  }
+}
+
+@media (min-width: 375px) and (max-width: 739px) {
+  .inner {
+    gap: 0.25rem;
+  }
+
+  .logoImage {
+    width: 58px;
+    max-height: 58px;
+  }
+
+  .logo picture {
+    padding: 0;
+    border-radius: 50%;
+    background: transparent;
+  }
+
+  .desktopNav {
+    display: block;
+    min-width: 0;
+  }
+
+  .navList {
+    gap: 0;
+  }
+
+  .navLink {
+    padding: 0.45rem 0.22rem;
+    font-size: 0.56rem;
+    white-space: nowrap;
+  }
+
+  .navList > li:last-child {
+    display: none;
+  }
+
+  .actions {
+    gap: 0.25rem;
+  }
+
+  .cart {
+    width: 30px;
+    height: 30px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .cart > svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .burger {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+  }
+
+  .accountLink {
     display: none;
   }
 }

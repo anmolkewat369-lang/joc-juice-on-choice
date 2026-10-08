@@ -14,11 +14,11 @@
      ------------------------------------------------------------------ */
 
   /* JOC greens */
-  --green-900: #083d29; /* dark green — dark sections, footer, primary buttons */
-  --green-800: #0a4731;
-  --green-700: #0f5b3a; /* primary JOC green */
-  --green-600: #14714a;
-  --green-500: #1e8f5f; /* bright accent on light surfaces */
+  --green-900: #093629; /* dark green — dark sections, footer, primary buttons */
+  --green-800: #0b4933;
+  --green-700: #176343; /* primary JOC green */
+  --green-600: #1d7953;
+  --green-500: #299468; /* bright accent on light surfaces */
   --green-400: #3fa876;
   --green-300: #86d9a4; /* readable green on dark surfaces */
 
@@ -28,9 +28,9 @@
   --yellow-400: #ffd25e;
 
   /* Mango orange */
-  --orange-600: #e07000;
-  --orange-500: #ff8a00;
-  --orange-400: #ffa23a;
+  --orange-600: #db7100;
+  --orange-500: #f58a0a;
+  --orange-400: #ffa32b;
 
   /* Support tones */
   --berry-600: #a3203f;
@@ -51,9 +51,9 @@
   --line-strong: rgba(15, 91, 58, 0.2);
 
   /* Surfaces */
-  --paper: #ffffff;
-  --paper-warm: #fff8e7; /* warm cream */
-  --paper-tint: #f7f4ea; /* soft cream */
+  --paper: #fffdf7;
+  --paper-warm: #f8f5e9; /* warm cream */
+  --paper-tint: #f1eee2; /* soft cream */
 
   /* Typography */
   --font-head: "Poppins", "Montserrat", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -94,6 +94,12 @@
 
   --nav-h: 70px;
   --cta-h: 60px;
+}
+
+@media (min-width: 740px) {
+  :root {
+    --nav-h: 96px;
+  }
 }
 
 *,

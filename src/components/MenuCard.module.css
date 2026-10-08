@@ -3,9 +3,10 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  border-radius: var(--radius-md);
+  border: 1px solid rgba(15, 91, 58, 0.08);
+  border-radius: 20px;
   background: var(--paper);
-  box-shadow: inset 0 0 0 1px var(--line);
+  box-shadow: 0 8px 24px rgba(33, 43, 31, 0.065);
   overflow: hidden;
   transition:
     transform var(--dur) var(--ease),
@@ -14,7 +15,7 @@
 
 .card:hover {
   transform: translateY(-4px);
-  box-shadow: inset 0 0 0 1px var(--line), var(--shadow-md);
+  box-shadow: 0 16px 34px rgba(33, 43, 31, 0.13);
 }
 
 .art {
@@ -128,7 +129,7 @@
   font-family: var(--font-head);
   font-size: 1.3rem;
   font-weight: 700;
-  color: var(--green-700);
+  color: var(--green-800);
   letter-spacing: -0.02em;
   white-space: nowrap;
 }
@@ -174,21 +175,66 @@
 /* --------------------------- Featured variant ---------------------- */
 
 .featured .body {
-  padding: 1.1rem 1.15rem 1.25rem;
+  min-height: 0;
+  gap: 0.2rem;
+  padding: 0.55rem 0.7rem 0.65rem;
 }
 
 .featured .name {
-  font-size: 1.16rem;
+  font-size: 1.02rem;
 }
 
 .featured .price {
-  font-size: 1.38rem;
+  font-size: 1.15rem;
+}
+
+.featured .art {
+  aspect-ratio: 1.38;
+}
+
+.featured[data-category="Shakes"] .art img {
+  transform: scale(1.75);
+  transform-origin: left center;
+}
+
+.featured .desc,
+.featured .size,
+.featured .foot :global(.chip) {
+  display: none;
+}
+
+.featured .foot {
+  padding-top: 0;
+}
+
+.featured .order {
+  position: absolute;
+  right: 0.65rem;
+  bottom: 0.65rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.featured .order > * {
+  justify-content: flex-end;
+}
+
+.featured .badge {
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(11, 73, 51, 0.92);
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* ----------------------------- Combo variant ----------------------- */
 
 .combo {
-  border-radius: var(--radius-lg);
+  border-radius: 22px;
   background: var(--paper);
   box-shadow: inset 0 0 0 1px var(--line), var(--shadow-sm);
 }
@@ -212,4 +258,86 @@
 
 .combo .price {
   font-size: 1.45rem;
+}
+
+@media (max-width: 560px) {
+  .card {
+    border-radius: 16px;
+  }
+
+  .art {
+    aspect-ratio: 1 / 1;
+  }
+
+  .body,
+  .featured .body {
+    gap: 0.35rem;
+    padding: 0.8rem 0.72rem 0.85rem;
+  }
+
+  .name,
+  .featured .name {
+    font-size: 0.95rem;
+  }
+
+  .desc {
+    font-size: 0.77rem;
+    line-height: 1.45;
+  }
+
+  .size {
+    font-size: 0.62rem;
+  }
+
+  .foot {
+    gap: 0.4rem;
+    padding-top: 0.55rem;
+  }
+
+  .foot .chip {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.62rem;
+  }
+
+  .price,
+  .featured .price {
+    font-size: 1.15rem;
+  }
+
+  .order {
+    margin-top: 0.55rem;
+    padding-top: 0.6rem;
+  }
+
+  .combo .body {
+    padding: 0.95rem;
+  }
+
+  .featured .body {
+    min-height: 0;
+    gap: 0.2rem;
+    padding: 0.42rem 0.5rem 0.55rem;
+  }
+
+  .featured .name {
+    max-width: calc(100% - 1.5rem);
+    font-size: 0.72rem;
+  }
+
+  .featured .price {
+    font-size: 0.85rem;
+  }
+
+  .featured .order {
+    right: 0.38rem;
+    bottom: 0.42rem;
+  }
+
+}
+
+@media (max-width: 360px) {
+  .body,
+  .featured .body {
+    padding-inline: 0.58rem;
+  }
 }

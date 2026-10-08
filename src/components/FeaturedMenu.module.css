@@ -4,8 +4,25 @@
   gap: 1rem;
 }
 
-.head .section-head {
+.section {
+  padding-block: clamp(2.5rem, 4.5vw, 4rem);
+}
+
+.head :global(.section-head) {
   margin-bottom: 0;
+}
+
+.head :global(.section-head h2) {
+  color: var(--green-900);
+  font-size: clamp(1.9rem, 1.4rem + 2.5vw, 3.2rem);
+  letter-spacing: -0.05em;
+  line-height: 1.05;
+}
+
+.head :global(.section-head h2 em) {
+  color: var(--orange-600);
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 500;
 }
 
 .allLink {
@@ -16,9 +33,9 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-  gap: clamp(0.9rem, 0.5rem + 1.4vw, 1.5rem);
-  margin-top: clamp(1.5rem, 1rem + 1.5vw, 2.25rem);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(0.9rem, 1.6vw, 1.5rem);
+  margin-top: clamp(1.25rem, 1rem + 1vw, 1.75rem);
 }
 
 .cell {
@@ -49,5 +66,46 @@
     align-self: auto;
     flex: none;
     margin-bottom: 0.4rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-top: 0.7rem;
+  }
+
+  .section {
+    padding-block: 1.15rem;
+  }
+
+  .allLink {
+    min-height: 38px;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.75rem;
+    display: none;
+  }
+
+  .allLink svg {
+    width: 14px;
+  }
+
+  .head :global(.section-head) {
+    gap: 0.55rem;
+  }
+
+  .head :global(.section-head p:last-child) {
+    font-size: 0.65rem;
+  }
+
+  .head :global(.section-head h2) {
+    font-size: 1.15rem;
+    line-height: 1.08;
+    white-space: nowrap;
+  }
+
+  .note {
+    font-size: 0.7rem;
   }
 }
