@@ -25,6 +25,7 @@ import {
 import { deliveryAreaStatusLabel } from "../../shared/delivery.js";
 import { actOnOrder, getOrder, listOrders } from "./api.js";
 import NewOrderAlert from "./NewOrderAlert.jsx";
+import MenuManagement from "./MenuManagement.jsx";
 import NotificationToggle from "../account/NotificationToggle.jsx";
 import { formatPrice, formatDateTime } from "./format.js";
 import styles from "./AdminOrders.module.css";
@@ -47,6 +48,7 @@ const EMPTY_COUNTS = {};
 const EMPTY_SET = new Set();
 
 export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSessionExpired }) {
+  const [section, setSection] = useState("orders");
   const [listing, setListing] = useState(null);
   const [filter, setFilter] = useState(INITIAL_FILTER);
   const [page, setPage] = useState(1);
@@ -247,13 +249,15 @@ export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSes
       <header className={styles.header}>
         <div>
           <div className={styles.titleRow}>
-            <h1 className={styles.title}>JOC Orders</h1>
+            <h1 className={styles.title}>
+              {section === "menu" ? "Menu Management" : "JOC Orders"}
+            </h1>
             {/*
               Counting orders the admin has not opened yet, using the poll that
               already runs — this badge costs no extra request. Clicking it goes
               to the New filter, which is where those orders can be worked.
             */}
-            {unreadCount > 0 ? (
+            {section === "orders" && unreadCount > 0 ? (
               <button
                 type="button"
                 className={styles.unreadBadge}
@@ -267,7 +271,7 @@ export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSes
           </div>
           <p className={styles.muted}>
             Signed in as {admin?.email}
-            {needsAttention > 0 ? (
+            {section === "orders" && needsAttention > 0 ? (
               <>
                 {" • "}
                 <strong className={styles.alert}>
@@ -308,6 +312,29 @@ export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSes
         </div>
       </header>
 
+      <nav className={styles.dashboardNav} aria-label="Admin sections">
+        <button
+          type="button"
+          className={`${styles.dashboardTab} ${section === "orders" ? styles.dashboardTabActive : ""}`}
+          aria-current={section === "orders" ? "page" : undefined}
+          onClick={() => setSection("orders")}
+        >
+          Orders
+        </button>
+        <button
+          type="button"
+          className={`${styles.dashboardTab} ${section === "menu" ? styles.dashboardTabActive : ""}`}
+          aria-current={section === "menu" ? "page" : undefined}
+          onClick={() => setSection("menu")}
+        >
+          Menu Management
+        </button>
+      </nav>
+
+      {section === "menu" ? (
+        <MenuManagement onSessionExpired={onSessionExpired} />
+      ) : (
+        <>
       <NewOrderAlert ref={notifyRef} enabled={soundOn} whatsappNumber={notify?.whatsappNumber} />
 
       {/*
@@ -502,6 +529,8 @@ export default function AdminOrders({ admin, busy: signOutBusy, onSignOut, onSes
           }}
         />
       ) : null}
+        </>
+      )}
     </div>
   );
 }

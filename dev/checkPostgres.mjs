@@ -190,9 +190,9 @@ check("the area and its confirmation reach the INSERT", () => {
     `delivery_area_confirmed is not in the INSERT: ${columns.join(", ")}`,
   );
   assert.equal(
-    columns.length,
+    columns.length + 1,
     params.length,
-    "the column list and the parameter list have drifted apart",
+    "the order columns and the extra availability-guard parameter have drifted apart",
   );
   assert.equal(valueFor("delivery_area"), "dixit-colony");
   assert.equal(valueFor("delivery_area_confirmed"), true);
@@ -208,6 +208,18 @@ check("the customer's own details are all still stored", () => {
   assert.equal(valueFor("payment_method"), "COD");
   assert.equal(valueFor("payment_status"), "PENDING", "a new COD order is pending");
   assert.equal(valueFor("order_status"), "RECEIVED", "JOC confirms delivery afterwards");
+});
+
+check("the order INSERT atomically rechecks current item availability", () => {
+  assert.match(
+    insert.sql,
+    /where not exists\s*\(\s*select 1 from joc_menu_availability[\s\S]*status <> 'available'/i,
+  );
+  assert.deepEqual(
+    params.at(-1),
+    ["paneer-momos"],
+    "the INSERT must check every priced item id against Postgres",
+  );
 });
 
 check("no legacy distance column is written", () => {

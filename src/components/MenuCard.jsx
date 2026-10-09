@@ -1,6 +1,7 @@
 import FoodArt from "./FoodArt";
 import AddToCartButton from "./cart/AddToCartButton";
 import { formatPrice } from "../data/menu";
+import { useCart } from "../cart/cartStore";
 import styles from "./MenuCard.module.css";
 
 const TONE_CLASS = {
@@ -31,6 +32,8 @@ export default function MenuCard({
   headingLevel: Heading = "h3",
   orderable = true,
 }) {
+  const { availabilityFor } = useCart();
+  const availability = availabilityFor(item.id);
   const variantClass = styles[variant] ? ` ${styles[variant]}` : "";
   const hasPhoto = Boolean(item.image);
 
@@ -47,6 +50,11 @@ export default function MenuCard({
         {item.badge ? (
           <span className={`chip chip--dark ${styles.badge} ${BADGE_CLASS[item.category] ?? ""}`}>
             {item.badge}
+          </span>
+        ) : null}
+        {availability && availability !== "available" ? (
+          <span className={`${styles.availabilityBadge} ${styles[`availability${availability}`]}`}>
+            {availability === "out_of_stock" ? "Out of Stock" : "Coming Soon"}
           </span>
         ) : null}
       </div>

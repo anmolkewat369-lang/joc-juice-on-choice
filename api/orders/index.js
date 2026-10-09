@@ -90,7 +90,11 @@ export default async function handler(req, res) {
     // the configured list and the explicit confirmation is required, so a payload
     // that skips either never reaches persistence. Everything the record carries
     // about delivery comes from here, already checked.
-    const record = buildOrderRecord(body, { customerUserId: customer.id });
+    const availabilityRows = await store.listMenuAvailability();
+    const availability = Object.fromEntries(
+      availabilityRows.map(({ itemId, status }) => [itemId, status]),
+    );
+    const record = buildOrderRecord(body, { customerUserId: customer.id, availability });
 
     // (3) Persist. The first thing that exists as a consequence of this request.
     const { order, created } = await store.createOrder(record, idempotencyKey);

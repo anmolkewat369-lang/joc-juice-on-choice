@@ -12,6 +12,7 @@ export default function QtyStepper({
   label,
   size = "sm",
   confirmed = false,
+  incrementDisabled = false,
 }) {
   return (
     <div className={`${styles.stepper} ${styles[size] ?? styles.sm}`}>
@@ -40,6 +41,7 @@ export default function QtyStepper({
         type="button"
         className={styles.button}
         onClick={onIncrement}
+        disabled={incrementDisabled}
         aria-label={`Add one more ${label}`}
       >
         <Plus size={15} aria-hidden="true" />

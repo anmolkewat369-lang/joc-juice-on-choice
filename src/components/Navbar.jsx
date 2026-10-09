@@ -89,13 +89,12 @@ export default function Navbar() {
       <div className={`container ${styles.inner}`}>
         <a className={styles.logo} href={sectionHref("#home")} aria-label={`${BRAND.name} — home`}>
           <picture>
-            <source media="(max-width: 739px)" srcSet="/joc-mark.png" />
             <img
               className={styles.logoImage}
-              src="/joc-logo.png"
+              src="/joc-mark.png"
               alt="JOC Juice & Cafe — Sip, Savor, Feel Good."
-              width="1152"
-              height="768"
+              width="512"
+              height="512"
             />
           </picture>
         </a>

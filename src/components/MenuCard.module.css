@@ -64,6 +64,27 @@
   z-index: 1;
 }
 
+.availabilityBadge {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  z-index: 1;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.availabilityout_of_stock {
+  background: #87351f;
+}
+
+.availabilitycoming_soon {
+  background: #4d536c;
+}
+
 .badgeShake {
   background: rgba(74, 56, 46, 0.88);
 }

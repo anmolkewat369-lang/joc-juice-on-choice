@@ -65,6 +65,39 @@
   gap: 0.4rem;
 }
 
+.dashboardNav {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.dashboardTab {
+  padding: 0.55rem 0.8rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-600);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dashboardTab:hover {
+  color: var(--ink-900);
+}
+
+.dashboardTab:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.dashboardTabActive {
+  border-bottom-color: var(--green-700);
+  color: var(--green-800);
+}
+
 .alert {
   color: var(--orange-600);
 }

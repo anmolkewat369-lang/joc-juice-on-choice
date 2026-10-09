@@ -91,6 +91,21 @@
   color: var(--ink-500);
 }
 
+.unavailable {
+  color: var(--berry-600);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.availabilityNotice {
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: #fdecec;
+  color: var(--berry-600);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
 .lineControls {
   display: flex;
   align-items: center;

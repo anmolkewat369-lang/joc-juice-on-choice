@@ -5,8 +5,9 @@
  * `db/migrations/003_cod_payment_provider.sql`,
  * `db/migrations/004_delivery_and_notifications.sql` and
  * `db/migrations/005_delivery_area_confirmation.sql` and
- * `db/migrations/006_customer_accounts.sql` — those files stay the
- * reference for running migrations by hand in the Supabase SQL editor. This
+ * `db/migrations/006_customer_accounts.sql` and
+ * `db/migrations/007_menu_availability.sql` — those files stay the reference for
+ * running migrations by hand in the Supabase SQL editor. This
  * copy exists so the API can self-provision on first request during local
  * development and nobody has to open a SQL editor to try ordering. Every
  * statement is idempotent.
@@ -368,5 +369,15 @@ insert into joc_schema_migrations (version) values ('005_delivery_area_confirmat
   on conflict (version) do nothing;
 insert into joc_schema_migrations (version) values ('006_customer_accounts')
   on conflict (version) do nothing;
-`;
 
+create table if not exists joc_menu_availability (
+  item_id    text primary key,
+  status     text not null default 'available'
+               check (status in ('available', 'out_of_stock', 'coming_soon')),
+  updated_at timestamptz not null default now(),
+  updated_by text not null
+);
+alter table joc_menu_availability enable row level security;
+insert into joc_schema_migrations (version) values ('007_menu_availability')
+  on conflict (version) do nothing;
+`;

@@ -45,8 +45,7 @@ export default function Gallery() {
           <p className="eyebrow">Gallery</p>
           <h2 id="gallery-title">A Taste of JOC</h2>
           <p>
-            Demo artwork covering every part of the menu. Real cafe photography is added here
-            once it is supplied.
+            Fresh café moments, colorful fruit blends, and the warm vibe that makes JOC a local favorite.
           </p>
         </div>
 

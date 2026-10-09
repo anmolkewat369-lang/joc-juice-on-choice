@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "test": "node dev/checkGuards.mjs && node dev/checkDelivery.mjs && node dev/checkPostgres.mjs && node dev/checkNotifications.mjs && node dev/checkCustomerAuth.mjs && node dev/checkPush.mjs && node dev/checkFooter.mjs && node dev/checkQr.mjs",
+    "test": "node dev/checkGuards.mjs && node dev/checkDelivery.mjs && node dev/checkPostgres.mjs && node dev/checkNotifications.mjs && node dev/checkCustomerAuth.mjs && node dev/checkPush.mjs && node dev/checkMenuAvailability.mjs && node dev/checkFooter.mjs && node dev/checkQr.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

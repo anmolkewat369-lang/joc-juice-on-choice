@@ -79,6 +79,11 @@ export const listOrders = ({ filter, page, pageSize, signal } = {}) => {
 export const getOrder = (orderId, { signal } = {}) =>
   request(`/api/admin/orders/${encodeURIComponent(orderId)}`, { signal });
 
+export const getMenuItems = ({ signal } = {}) => request("/api/menu", { signal });
+
+export const updateMenuAvailability = (itemId, status) =>
+  request("/api/menu", { method: "PATCH", body: { itemId, status } });
+
 /**
  * Perform one guarded action.
  *

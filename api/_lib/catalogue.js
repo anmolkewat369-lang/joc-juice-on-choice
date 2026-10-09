@@ -30,7 +30,7 @@ export function productFor(productId) {
  * Unknown or unavailable products abort the whole order rather than silently
  * dropping a line — a partially priced order is worse than a clear error.
  */
-export function priceItems(rawItems) {
+export function priceItems(rawItems, availability = {}) {
   const { items, error } = normaliseItems(rawItems);
   if (error) return { lines: [], totals: null, error };
 
@@ -40,7 +40,11 @@ export function priceItems(rawItems) {
   for (const { id, qty } of items) {
     const product = CATALOGUE.get(id);
     if (!product || !Number.isFinite(product.price) || product.price <= 0) {
-      unavailable.push(id);
+      unavailable.push(null);
+      continue;
+    }
+    if (availability[id] && availability[id] !== "available") {
+      unavailable.push(product.name);
       continue;
     }
     const lineTotal = product.price * qty;
@@ -56,17 +60,19 @@ export function priceItems(rawItems) {
   }
 
   if (unavailable.length > 0) {
-    return { lines: [], totals: null, error: unavailableItemError() };
+    return { lines: [], totals: null, error: unavailableItemError(unavailable) };
   }
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
   return { lines, totals: totalsFor(subtotal), error: null };
 }
 
-function unavailableItemError() {
-  return (
-    "One or more items are no longer available. Please review your cart and try again."
-  );
+export function unavailableItemError(items) {
+  const namedItems = items.filter(Boolean);
+  if (namedItems.length === 0) {
+    return "One or more items are no longer available. Please review your cart and try again.";
+  }
+  return `${namedItems.join(", ")} ${namedItems.length === 1 ? "is" : "are"} no longer available. Please remove ${namedItems.length === 1 ? "it" : "them"} from your cart and try again.`;
 }
 
 export { MAX_QTY_PER_ITEM, CURRENCY };

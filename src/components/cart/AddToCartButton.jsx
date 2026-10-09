@@ -13,14 +13,33 @@ import styles from "./AddToCartButton.module.css";
  * for screen readers.
  */
 export default function AddToCartButton({ item, compact = false }) {
-  const { items, addItem, increment, decrement } = useCart();
+  const { items, addItem, increment, decrement, availabilityFor, availabilityLoading } = useCart();
   const [justAdded, setJustAdded] = useState(false);
   const timer = useRef(null);
 
   const line = items.find((entry) => entry.id === item.id);
   const qty = line?.qty ?? 0;
+  const availability = availabilityFor(item.id);
 
   useEffect(() => () => clearTimeout(timer.current), []);
+
+  if (availability !== "available") {
+    const label =
+      availability === "out_of_stock"
+        ? "Out of Stock"
+        : availability === "coming_soon"
+          ? "Coming Soon"
+          : availabilityLoading
+            ? "Checking availability…"
+            : "Availability unavailable";
+    return (
+      <div className={styles.wrap}>
+        <button type="button" className={`${styles.add} ${styles.unavailable}`} disabled>
+          {label}
+        </button>
+      </div>
+    );
+  }
 
   const onAdd = () => {
     addItem(item.id, 1);
@@ -61,6 +80,7 @@ export default function AddToCartButton({ item, compact = false }) {
         label={item.name}
         onIncrement={() => increment(item.id)}
         onDecrement={() => decrement(item.id)}
+        incrementDisabled={availability !== "available"}
       />
       <span className="visually-hidden" role="status" aria-live="polite">
         {`${item.name}, quantity ${qty} in cart.`}

@@ -24,9 +24,9 @@ export const GALLERY_IMAGES = [
   { id: "g7", art: "juice", tone: "watermelon", category: "Juices", alt: "Illustration of a chilled watermelon juice glass with a watermelon wedge", w: 800, h: 600, span: "wide" },
   { id: "g8", art: "maggi", tone: "paneer", category: "Maggi", alt: "Illustration of a hot bowl of noodles with steam and chopsticks", w: 800, h: 800, span: "sq" },
   { id: "g9", art: "combo", tone: "classic", category: "Combos", alt: "Illustration of a combo plate with a sandwich, juice and coffee", w: 800, h: 1000, span: "tall" },
-  { id: "g10", art: "storefront", tone: "shop", category: "Storefront", alt: "Illustration of a JOC cafe storefront with a striped awning and a window counter", w: 800, h: 1000, span: "tall" },
+  { id: "g10", art: "storefront", tone: "shop", category: "Storefront", alt: "JOC juice counter with fruit cups, beverages and a branded cafe facade", w: 1600, h: 1100, span: "tall", src: "/images/gallery/joc-juice-counter.png" },
   { id: "g11", art: "coldCoffee", tone: "cold", category: "Coffee", alt: "Illustration of a cold coffee served over ice with a chocolate straw", w: 800, h: 600, span: "wide" },
-  { id: "g12", art: "interior", tone: "room", category: "Storefront", alt: "Illustration of a bright cafe interior with a window, plants, a table and two cups", w: 800, h: 800, span: "sq" },
+  { id: "g12", art: "interior", tone: "room", category: "Storefront", alt: "Inside JOC cafe with the seating area, colorful decor and the juice bar", w: 1600, h: 1200, span: "sq", src: "/images/gallery/joc-interior.png" },
 ];
 
 export const GALLERY_FILTERS = [

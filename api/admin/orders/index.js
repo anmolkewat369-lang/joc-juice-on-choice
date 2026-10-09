@@ -17,8 +17,14 @@ import { requireAdmin } from "../../_lib/adminAuth.js";
 import { listOrders, orderCounts } from "../../_lib/ordersAdmin.js";
 import { whatsappNumber } from "../../_lib/notify.js";
 import { emailConfig } from "../../_lib/email.js";
+import { handleMenuAvailability } from "../../_lib/menuAvailability.js";
 
 export default async function handler(req, res) {
+  const path = String(req.url ?? "").split("?")[0].replace(/\/+$/, "");
+  if (path === "/api/menu" || path === "/menu") {
+    return handleMenuAvailability(req, res);
+  }
+
   if (!methodGuard(req, res, "GET")) return;
 
   try {

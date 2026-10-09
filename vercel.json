@@ -10,6 +10,10 @@
   },
   "rewrites": [
     {
+      "source": "/api/menu",
+      "destination": "/api/admin/orders"
+    },
+    {
       "source": "/api/payments/methods",
       "destination": "/api/payments/create"
     },

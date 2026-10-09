@@ -27,6 +27,8 @@ import {
 } from "../../shared/ordering.js";
 import { deliveryAreaFor } from "../../shared/delivery.js";
 import { AUTO_MIGRATE_SQL } from "./schema.js";
+import { ApiError } from "./http.js";
+import { unavailableItemError } from "./catalogue.js";
 
 let driverPromise = null;
 
@@ -102,6 +104,39 @@ function createPostgresStore() {
     driver: "postgres",
     durable: true,
 
+    async listMenuAvailability() {
+      const { rows } = await run(
+        `select item_id, status, updated_at, updated_by
+           from joc_menu_availability`,
+      );
+      return rows.map((row) => ({
+        itemId: row.item_id,
+        status: row.status,
+        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
+        updatedBy: row.updated_by,
+      }));
+    },
+
+    async setMenuAvailability(itemId, status, updatedBy) {
+      const { rows } = await run(
+        `insert into joc_menu_availability (item_id, status, updated_by)
+         values ($1, $2, $3)
+         on conflict (item_id) do update
+           set status = excluded.status,
+               updated_at = now(),
+               updated_by = excluded.updated_by
+         returning item_id, status, updated_at, updated_by`,
+        [itemId, status, updatedBy],
+      );
+      const row = rows[0];
+      return {
+        itemId: row.item_id,
+        status: row.status,
+        updatedAt: new Date(row.updated_at).toISOString(),
+        updatedBy: row.updated_by,
+      };
+    },
+
     /**
      * Insert a new order, or return the one that already exists for this
      * idempotency key. The unique index is what makes a double-clicked
@@ -116,7 +151,12 @@ function createPostgresStore() {
            tracking_token, customer_user_id,
            items, subtotal, delivery_charge, total, currency,
            payment_method, payment_status, order_status, payment_provider
-         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,$17,$18,$19,$20,$21)
+         )
+         select $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,$17,$18,$19,$20,$21
+          where not exists (
+            select 1 from joc_menu_availability
+             where item_id = any($22::text[]) and status <> 'available'
+          )
          on conflict (idempotency_key) do nothing
          returning *`,
         [
@@ -147,6 +187,7 @@ function createPostgresStore() {
           record.paymentStatus,
           record.orderStatus,
           record.paymentProvider ?? null,
+          record.items.map((item) => item.id),
         ],
       );
 
@@ -168,6 +209,21 @@ function createPostgresStore() {
         [idempotencyKey],
       );
       if (existing.rows.length === 0) {
+        const { rows: unavailableRows } = await run(
+          `select item_id from joc_menu_availability
+            where item_id = any($1::text[]) and status <> 'available'`,
+          [record.items.map((item) => item.id)],
+        );
+        if (unavailableRows.length > 0) {
+          const unavailableIds = new Set(unavailableRows.map((row) => row.item_id));
+          throw new ApiError(
+            422,
+            unavailableItemError(
+              record.items.filter((item) => unavailableIds.has(item.id)).map((item) => item.name),
+            ),
+            "items_unavailable",
+          );
+        }
         throw new Error("Order insert conflicted but no existing order was found.");
       }
       return { order: existing.rows[0], created: false };
@@ -810,6 +866,14 @@ function createMemoryStore() {
     driver: "memory",
     durable: false,
 
+    async listMenuAvailability() {
+      return [];
+    },
+
+    async setMenuAvailability() {
+      throw new Error("Menu availability requires durable Postgres storage.");
+    },
+
     async createOrder(record, idempotencyKey) {
       const replayId = byKey.get(idempotencyKey);
       if (replayId) return { order: orders.get(replayId), created: false };
@@ -1305,4 +1369,3 @@ export const ORDER_DEFAULTS = {
   orderStatus: ORDER_STATUS.RECEIVED,
   paymentStatus: PAYMENT_STATUS.PENDING,
 };
-

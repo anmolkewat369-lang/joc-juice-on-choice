@@ -95,7 +95,16 @@ const clearDraft = () => {
  * receives, including that the chosen area is one JOC actually serves.
  */
 export default function CheckoutView({ onPlaced, onReturnHome }) {
-  const { lines, subtotal, deliveryCharge, total, isEmpty } = useCart();
+  const {
+    lines,
+    subtotal,
+    deliveryCharge,
+    total,
+    isEmpty,
+    availabilityFor,
+    availabilityLoading,
+    availabilityError,
+  } = useCart();
   const { status: authStatus, customer } = useCustomer();
   const [form, setForm] = useState(() => readDraft() ?? EMPTY_FORM);
   const [errors, setErrors] = useState({});
@@ -104,6 +113,8 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
   const headingRef = useRef(null);
   const flow = useOrderFlow({ onComplete: onPlaced });
   const busy = isBusy(flow.flow);
+  const blockedLines = lines.filter((line) => availabilityFor(line.id) !== "available");
+  const availabilityBlocked = availabilityLoading || blockedLines.length > 0;
 
   const items = useMemo(
     () => lines.map(({ id, qty }) => ({ id, qty })),
@@ -201,6 +212,7 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
   const onSubmit = async (event) => {
     event.preventDefault();
     if (busy) return; // blocks the double click before the request goes out
+    if (availabilityBlocked) return;
 
     setSubmitted(true);
     const result = validateCheckout({ ...form, items });
@@ -258,6 +270,22 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
 
         <div className={styles.layout}>
           <form className={styles.form} onSubmit={onSubmit} noValidate>
+            {availabilityBlocked ? (
+              <p className={styles.alert} role="alert">
+                <AlertCircle size={17} aria-hidden="true" />
+                <span>
+                  {availabilityLoading
+                    ? "Checking current item availability…"
+                    : availabilityError
+                      ? "Availability could not be confirmed. Please refresh before ordering."
+                      : `${blockedLines.map((line) => line.name).join(", ")} cannot be ordered right now. Remove ${
+                          blockedLines.length === 1 ? "it" : "them"
+                        } from your cart.`}
+                  {" "}
+                  <a className={styles.alertAction} href={cartHref}>Review your cart</a>
+                </span>
+              </p>
+            ) : null}
             <fieldset className={styles.block} disabled={busy}>
               <legend className={styles.blockTitle}>Customer details</legend>
               <div className={styles.grid}>
@@ -327,7 +355,7 @@ export default function CheckoutView({ onPlaced, onReturnHome }) {
                         );
                       }
                     }}
-                    disabled={busy}
+                    disabled={busy || availabilityBlocked}
                     error={errors.deliveryArea}
                   />
                 </div>

@@ -52,6 +52,14 @@
   box-shadow: var(--shadow-sm);
 }
 
+.add:disabled,
+.unavailable {
+  background: var(--paper-tint);
+  color: var(--ink-600);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .add:active {
   transform: translateY(0);
   box-shadow: none;

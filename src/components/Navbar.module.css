@@ -36,17 +36,19 @@
 
 .logo picture {
   display: block;
-  padding: 3px 7px;
-  border-radius: 10px;
+  padding: 3px;
+  border-radius: 50%;
   background: var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(6, 34, 25, 0.08);
 }
 
 .logoImage {
   display: block;
-  width: clamp(104px, 12vw, 150px);
+  width: clamp(42px, 4vw, 62px);
   height: auto;
-  max-height: calc(var(--nav-h) - 14px);
-  object-fit: contain;
+  max-height: calc(var(--nav-h) - 18px);
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 /* --------------------------- Desktop nav --------------------------- */

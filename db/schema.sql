@@ -226,6 +226,20 @@ create index if not exists joc_notifications_order_idx
 create index if not exists joc_notifications_pending_idx
   on joc_notifications (lease_until) where status = 'pending';
 
+-- ---------------------------------------------------------------------------
+-- Menu availability overrides.
+--
+-- Catalogue details stay in src/data/menu.js; missing rows mean available.
+-- Only the authenticated server API reads and writes these overrides.
+-- ---------------------------------------------------------------------------
+create table if not exists joc_menu_availability (
+  item_id    text primary key,
+  status     text not null default 'available'
+               check (status in ('available', 'out_of_stock', 'coming_soon')),
+  updated_at timestamptz not null default now(),
+  updated_by text not null
+);
+
 -- ---------------------------------------------------------------------
 -- Keeps updated_at honest without the application remembering to do it.
 -- ---------------------------------------------------------------------
@@ -253,3 +267,4 @@ create trigger joc_orders_touch
 alter table joc_orders enable row level security;
 alter table joc_order_events enable row level security;
 alter table joc_notifications enable row level security;
+alter table joc_menu_availability enable row level security;

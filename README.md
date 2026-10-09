@@ -31,7 +31,7 @@ npm run dev      # dev server + local /api bridge (dev/jocApiDevServer.js)
 npm run build    # production build to dist/
 npm run preview  # serve the production build
 npm run lint     # oxlint
-npm test         # guard, delivery, notification, customer-auth and push checks (no database needed)
+npm test         # guard, availability, delivery, notification, auth and payment checks (no live database needed)
 ```
 
 Without `DATABASE_URL` the API runs in a clearly-labelled **in-memory demo** mode
@@ -41,17 +41,19 @@ tagged `storage.durable: false`. No order is ever fake-stored.
 ## Checks
 
 There is no test runner. `npm test` runs plain Node scripts; every check runs
-even if an earlier one fails, and the process exits non-zero if any failed. All of
-them work against the in-memory store, so none needs a database or a network.
+even if an earlier check within its script fails, and the process exits non-zero
+if any failed. The checks use the in-memory store, a stub Postgres pool and
+rendered components, so none needs a live database or network.
 
 | Script | What it pins down |
 | --- | --- |
 | `dev/checkGuards.mjs` | 60 checks over the guard rules: order-token ownership, UTR normalisation, admin auth (unauthenticated, forged cookie, no session secret), status-transition legality, `PAID` reachable only by admin, the checkout field-error contract, area and address-confirmation enforcement, that placing an order makes no outbound call, and that COD never asks the customer to pay online |
 | `dev/checkDelivery.mjs` | 34 checks on the delivery-area rule: the list is exactly JOC's 22 areas with these labels in this order, every one is accepted by the server and findable by search (commas included), membership is checked after normalising case and whitespace, prototype keys and the previous provisional names are refused, the confirmation must be exactly `true`, a placed order carries no distance and triggers no outbound request, and **no file under `api/`, `shared/` or `src/` mentions a maps provider, a radius or a coordinate** |
-| `dev/checkPostgres.mjs` | 11 checks on the **durable** driver, driven against a stub `pg` pool: `delivery_area` and `delivery_area_confirmed` are in the real `INSERT` with the right values, the customer's name/phone/email/address/landmark/instructions are all still stored, no legacy distance column is written, and a row read back out carries the area, its label, the confirmation, the address and the landmark to the admin |
+| `dev/checkPostgres.mjs` | 12 checks on the **durable** driver, driven against a stub `pg` pool: `delivery_area` and `delivery_area_confirmed` are in the real `INSERT` with the right values, the availability guard is part of the order `INSERT`, the customer's details are still stored, and the row read back out carries the area and address to the admin |
 | `dev/checkNotifications.mjs` | 17 checks on the send ledger: exactly-once under repeated and concurrent triggers, distinct-status dedupe, skipped-vs-failed recording, a broken provider never failing an order, an unreachable ledger still sending, and the tracking token never appearing in a payload |
 | `dev/checkCustomerAuth.mjs` | 18 checks on customer accounts: a session cannot be minted without a secret, a customer token is never an admin token (and vice versa), tampering/rotation/expiry are rejected, the cookie is httpOnly/Lax/path-wide and Secure only over TLS, `requireCustomer` fails closed, login sets a cookie only on success, signup waits for confirmation when Supabase issued no session, and `GET /orders` returns only the caller's own orders with owner-only tracking secrets |
 | `dev/checkPush.mjs` | 21 checks on Web Push: VAPID must be fully configured, a new order fans out to every admin subscription and never to a customer, a confirmation goes only to the owning customer, the tracking secret stays in the URL fragment, a repeated fact sends exactly once, transient failures are recorded and kept while `410`s are cleaned up, no push failure throws, and the subscription endpoint decides the caller's role server-side |
+| `dev/checkMenuAvailability.mjs` | Admin authorization, the three allowed statuses and invalid input, persistent Postgres overrides across store recreation, unchanged public catalogue data, disabled badges/cart controls, stale-cart blocking, and server rejection before persistence |
 | `dev/checkFooter.mjs` | 9 checks against the **rendered** footer (its Vite SSR bundle, then `react-dom/server`): the Contact Us details, the WhatsApp action and the phone/email tap targets are present, the contact block is not conditional on the viewport and no stylesheet hides it, the sticky "Get Directions" clearance exists at the bar's own breakpoint, long values cannot force a sideways scroll, and the footer still shows every link and line it had before |
 | `dev/checkQr.mjs` | Decodes the server-generated UPI QR with **jsQR** — an independent implementation — across every payload length 1..213, several error-correction levels, and realistic `upi://pay` intent strings |
 
@@ -79,6 +81,11 @@ in the API response and is written by nothing would pass every other suite.
 - **Server-side prices**: the API recomputes every total from `src/data/menu.js`
   and rejects unknown ids or quantities. The localStorage cart is a shopping bag,
   never the database.
+- **Menu availability**: the admin can mark a catalogue item Available, Out of
+  Stock or Coming Soon from the dashboard. Migration 007 stores only per-item
+  availability overrides in Supabase; items without an override default to
+  Available. The public menu refreshes statuses periodically, while order
+  creation checks the current database status again and rejects unavailable items.
 - **Idempotency**: every submission carries an `Idempotency-Key`; a double click,
   refresh or retry resolves to the same order. The replay is resolved *before* the
   order is validated and stored, so re-sending a request never creates a second
@@ -172,6 +179,7 @@ few moving parts as possible.
 | POST | `/api/admin/login` / `/api/admin/session` | Supabase sign-in and session probe for `/admin` |
 | GET | `/api/admin/orders` | Admin order list, filters, counts, pagination |
 | GET/PATCH | `/api/admin/orders/:orderId` | Order detail, verify a UTR, advance order status, notification audit rows |
+| GET/PATCH | `/api/menu` | Public catalogue with availability; admin-only status updates |
 | POST | `/api/customer/signup` · `/login` · `/forgot` · `/reset` | Create an account, sign in, request a reset, set a new password — all through Supabase Auth; JOC never stores a password or a hash |
 | GET | `/api/customer/session` · `/api/customer/orders` | Session probe, and the signed-in customer's own orders. Ownership comes from the session cookie, never from a query parameter |
 | POST/DELETE | `/api/customer/logout` | Clear the customer session cookie |
@@ -190,6 +198,8 @@ Customer accounts and push each add exactly one function — `api/customer/[acti
 (a single-segment dynamic route that dispatches `signup` / `login` / `logout` /
 `session` / `forgot` / `reset` / `orders`) and `api/push/subscribe.js` — which keeps
 the deployment inside the Hobby cap instead of adding one function per action.
+`/api/menu` is rewritten onto the existing `api/admin/orders/index.js` handler, so
+the menu read/update API does not consume another function slot.
 
 Admin routes require a valid session cookie and fail closed with a 500-style
 `ApiError` when `JOC_ADMIN_SESSION_SECRET` is unset. Customer routes are separate:
@@ -380,7 +390,8 @@ db/schema.sql   Postgres schema (orders, notifications, indexes, updated trigger
 db/migrations/  Ordered migrations for an existing database (002 payment/admin,
                 003 COD, 004 delivery + email + notifications,
                 005 delivery area + confirmation,
-                006 customer accounts + push subscriptions/deliveries)
+                006 customer accounts + push subscriptions/deliveries,
+                007 persistent menu availability)
 shared/         Contract imported by frontend and API (ordering, delivery)
 src/account/    Signup/login/reset, auth context, My Orders, push toggle
 src/admin/      Admin dashboard (lazy-loaded; never requested by a customer)
@@ -463,22 +474,27 @@ name, address and category — no phone, no opening hours, no aggregate rating.
    Supabase's Redirect URLs. Place a test order while signed out to confirm
    `POST /api/orders` returns `401 customer_unauthenticated`, then sign in and
    confirm it succeeds.
-9. (Optional) Run `npx web-push generate-vapid-keys`, set the three `VAPID_*`
+9. Apply `db/migrations/007_menu_availability.sql` to the existing Supabase
+   database before deploying menu management, using the SQL editor or a direct
+   connection (not the transaction pooler). The table is protected by RLS and
+   is read/written through the server API; no database credential is sent to the
+   browser. Missing item rows mean Available.
+10. (Optional) Run `npx web-push generate-vapid-keys`, set the three `VAPID_*`
    variables, and enable notifications at `/my-orders` and in the dashboard.
-10. Confirm `JOC_UPI_ID` on the production deployment by reading
+11. Confirm `JOC_UPI_ID` on the production deployment by reading
     `GET /api/payments/methods` — it should report `provider: manual_upi` with
     both Cash on Delivery and UPI available.
-11. Place one test order from a real customer address and read it at
+12. Place one test order from a real customer address and read it at
     `/admin/orders`: the area, the exact address and the customer's confirmation
     should all be there, and the order should sit at `RECEIVED` until you accept it.
     This is the one flow where "it looks fine in the browser" is not evidence — the
     confirmation the customer ticked is not the same as the address JOC can find.
-12. Set `JOC_SITE_URL` to the real domain, so tracking links in customer emails
+13. Set `JOC_SITE_URL` to the real domain, so tracking links in customer emails
     point at production.
-13. Run `npm test` and `npm run lint` against the final state.
-14. Add the live domain as `<link rel="canonical">` and a real 1200×630 OG image.
-15. Remove the concept/demo wording from the hero, contact section and footer.
-16. Decide the order-status workflow (`RECEIVED → … → DELIVERED` is already
+14. Run `npm test`, `npm run lint` and `npm run build` against the final state.
+15. Add the live domain as `<link rel="canonical">` and a real 1200×630 OG image.
+16. Remove the concept/demo wording from the hero, contact section and footer.
+17. Decide the order-status workflow (`RECEIVED → … → DELIVERED` is already
     modelled and enforced server-side, and editable from `/admin/orders`).
 
 > Razorpay is **not** required to go live. It stays behind the provider

@@ -41,7 +41,7 @@ export function readIdempotencyKey(req) {
  * against that list, and this record carries the normalised id, the label resolved
  * from the list and a real boolean. No distance is measured and none is stored.
  */
-export function buildOrderRecord(body, { customerUserId = null } = {}) {
+export function buildOrderRecord(body, { customerUserId = null, availability = {} } = {}) {
   const { errors, valid, value } = validateCheckout(body);
   if (!valid) {
     // The whole field map travels in `errors`, and the first message becomes the
@@ -50,7 +50,7 @@ export function buildOrderRecord(body, { customerUserId = null } = {}) {
     throw new ApiError(422, firstError(errors), "invalid_checkout", null, errors);
   }
 
-  const { lines, totals, error } = priceItems(body.items);
+  const { lines, totals, error } = priceItems(body.items, availability);
   if (error) throw new ApiError(422, error, "items_unavailable");
 
   // A customer may only choose a payment method that is actually usable. If

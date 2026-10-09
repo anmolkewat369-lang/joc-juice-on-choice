@@ -28,6 +28,7 @@ const API_PREFIX = "/api/";
  * which is exactly what the production rewrite delivers.
  */
 const ROUTES = [
+  { match: /^\/menu$/, file: "admin/orders/index.js" },
   { match: /^\/orders$/, file: "orders/index.js" },
   { match: /^\/orders\/utr$/, file: "orders/utr.js" },
   { match: /^\/orders\/[^/]+$/, file: "orders/[orderId].js" },

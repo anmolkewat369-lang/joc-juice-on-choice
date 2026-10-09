@@ -26,6 +26,11 @@
   color: var(--green-900);
 }
 
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .button:active {
   background: var(--lime-400);
 }
